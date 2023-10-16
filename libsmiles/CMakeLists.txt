@@ -4,14 +4,16 @@
 set(header_path "${CMAKE_CURRENT_SOURCE_DIR}/include")
 list(APPEND header_files
   "${header_path}/compression_dictionary.hpp"
-  "${header_path}/compressor.hpp"
+  "${header_path}/cpu/compressor.hpp"
+  "${header_path}/compressor_interface.hpp"
+  "${header_path}/compressor_implementations.hpp"
   "${header_path}/dictionary_graph.hpp"
 )
 
 set(source_path "${CMAKE_CURRENT_SOURCE_DIR}/src")
 list(APPEND source_files
   "${source_path}/compression_dictionary.cpp"
-  "${source_path}/compressor.cpp"
+  "${source_path}/cpu/compressor.cpp"
 )
 
 #########################################################################
