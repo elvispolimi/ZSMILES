@@ -16,6 +16,19 @@ list(APPEND source_files
   "${source_path}/cpu/compressor.cpp"
 )
 
+list(APPEND cuda_header_files
+  "${header_path}/cuda/compressor.cuh"
+)
+
+list(APPEND cuda_source_files
+  "${source_path}/cuda/compressor.cu"
+)
+
+if(ENABLE_CUDA)
+  list(APPEND source_files ${cuda_source_files})
+  list(APPEND header_files ${cuda_header_files})
+endif()
+
 #########################################################################
 #### Define how we should compile the library
 #########################################################################
@@ -27,6 +40,11 @@ set_target_properties(libsmiles PROPERTIES PUBLIC_HEADER "${headers}")
 target_include_directories(libsmiles PUBLIC "${header_path}")
 set_target_properties(libsmiles PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(libsmiles PUBLIC Boost::graph)
+add_CUDA_dependency(libliglibsmilesen)
+set_cxx_flags(libsmiles)
+if(ENABLE_CUDA)
+  target_compile_definitions(libsmiles PUBLIC ENABLE_CUDA_IMPLEMENTATION)
+endif()
 
 # set its name to avoid the double lib
 set_target_properties(libsmiles PROPERTIES PREFIX "" OUTPUT_NAME "libsmiles")

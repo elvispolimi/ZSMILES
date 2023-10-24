@@ -1,4 +1,6 @@
 #include "cpu/compressor.hpp"
+#include "cuda/compressor.cuh"
+
 #include <boost/program_options/options_description.hpp>
 #include <boost/program_options/parsers.hpp>
 #include <boost/program_options/variables_map.hpp>
@@ -26,9 +28,10 @@ int main(int argc, char* argv[]) {
   app_description.add_options()("decompress,d", "Decompress the input file");
   po::store(po::command_line_parser(argc, argv).options(app_description).run(), vm);
   if (vm.count("help") > 0) {
-    std::cout << "This application prints in the standard output the compresses or decompress SMILES of each one that it "
-                 "reads from the standard input."
-              << std::endl;
+    std::cout
+        << "This application prints in the standard output the compresses or decompress SMILES of each one that it "
+           "reads from the standard input."
+        << std::endl;
     std::cout << std::endl;
     std::cout << "USAGE: " << argv[0] << "-i input_file -o output_file -c/-d" << std::endl;
     std::cout << std::endl;
@@ -43,30 +46,55 @@ int main(int argc, char* argv[]) {
     // declare the functor that performs the conversion
     smiles::compressor_container compress_cont;
 
-    if(vm.count("cuda")){
-      // TODO
+    if (vm.count("cuda")) {
+#ifdef ENABLE_CUDA_IMPLEMENTATION
+      compress_cont.create<smiles::cuda::smiles_compressor>();
+#else
+      throw std::runtime_error("CUDA implementation required but not available");
+#endif
     } else
       compress_cont.create<smiles::cpu::smiles_compressor>();
 
     // perform the translation
-    std::ifstream i_file(input_file); // Open the file
+    std::ifstream i_file(input_file);  // Open the file
     std::ofstream o_file(output_file); // Open the file
-    for (std::string line; std::getline(i_file, line); /* automatically handled */) {
-      o_file << compress_cont(line) << std::endl;
+    std::string line;
+#pragma omp parallel num_threads(10)
+    {
+#pragma omp master
+      while (std::getline(i_file, line))
+#pragma omp task
+      {
+        auto result = compress_cont(line);
+#pragma omp critical
+        {
+          o_file << result << std::endl;
+          // cout.flush();
+        }
+      }
+#pragma omp taskwait
     }
+
+    // for (std::string line; std::getline(i_file, line); /* automatically handled */) {
+    //   o_file << compress_cont(line) << std::endl;
+    // }
     i_file.close();
     o_file.close();
   } else if (vm.count("decompress")) {
     // declare the functor that performs the conversion
     smiles::decompressor_container decompress_cont;
 
-    if(vm.count("cuda")){
-      // TODO
+    if (vm.count("cuda")) {
+#ifdef ENABLE_CUDA_IMPLEMENTATION
+      decompress_cont.create<smiles::cuda::smiles_decompressor>();
+#else
+      throw std::runtime_error("CUDA implementation required but not available");
+#endif
     } else
       decompress_cont.create<smiles::cpu::smiles_decompressor>();
 
     // perform the translation
-    std::ifstream i_file(input_file); // Open the file
+    std::ifstream i_file(input_file);  // Open the file
     std::ofstream o_file(output_file); // Open the file
     for (std::string line; std::getline(i_file, line); /* automatically handled */) {
       o_file << decompress_cont(line) << std::endl;
