@@ -1,7 +1,10 @@
 #include "cpu/compressor.hpp"
+
 #include "compression_dictionary.hpp"
+
 #include <algorithm>
 #include <boost/graph/adjacency_list.hpp>
+#include <fstream>
 #include <limits>
 
 namespace smiles {
@@ -10,7 +13,7 @@ namespace smiles {
     // we model the problem of SMILES compression as choosing the minimum path between the first character and the
     // last one. The cost of each path is the number of character that we need to produce in the output. We solve
     // this problem using dijkstra and we use a suppor tree to perform pattern matching.
-    std::string_view smiles_compressor::operator()(const std::string_view& plain_description) {
+    void smiles_compressor::operator()(const std::string_view& plain_description, std::ofstream& out_s) {
       using index_type = std::string_view::size_type;
 
       // once in the lifetime of the application build a SMILES dictionary. We use this tree to perform pattern
@@ -96,8 +99,9 @@ namespace smiles {
         }
       }
 
-      // when we reached this point we have correctly compressed the SMILES, we can return it
-      return {output_string};
+// when we reached this point we have correctly compressed the SMILES, we can return it
+#pragma omp critical
+      { out_s << output_string << std::endl; }
     }
 
     std::string_view smiles_decompressor::operator()(const std::string_view& compressed_description) {

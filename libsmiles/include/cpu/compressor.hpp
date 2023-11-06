@@ -1,14 +1,12 @@
 #pragma once
 
-#include "compressor_interface.hpp"
-
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace smiles {
   namespace cpu {
-    class smiles_compressor: public compressor_interface {
+    class smiles_compressor{
       using char_type = std::string::value_type;
 
       std::string output_string; // we need this buffer to minimize memory allocation/deallocation
@@ -22,10 +20,10 @@ namespace smiles {
         min_path_index.reserve(2000);
         min_path_score.reserve(2000);
       }
-      std::string_view operator()(const std::string_view& plain_description);
+      void operator()(const std::string_view& plain_description, std::ofstream&);
     };
 
-    class smiles_decompressor: public decompressor_interface {
+    class smiles_decompressor{
       using char_type = std::string::value_type;
 
       std::string scratchpad; // we need this buffer to minimize memory allocation/deallocation
