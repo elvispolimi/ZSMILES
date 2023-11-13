@@ -3,8 +3,8 @@
 #########################################################################
 set(header_path "${CMAKE_CURRENT_SOURCE_DIR}/include")
 list(APPEND header_files
-  "${header_path}/compression_dictionary.hpp"
   "${header_path}/cpu/compressor.hpp"
+  "${header_path}/cpu/dictionary.hpp"
   "${header_path}/compressor_implementations.hpp"
   "${header_path}/dictionary_graph.hpp"
   "${header_path}/utils.hpp"
@@ -12,12 +12,14 @@ list(APPEND header_files
 
 set(source_path "${CMAKE_CURRENT_SOURCE_DIR}/src")
 list(APPEND source_files
-  "${source_path}/compression_dictionary.cpp"
   "${source_path}/cpu/compressor.cpp"
+  "${source_path}/cpu/dictionary.cpp"
 )
 
 list(APPEND cuda_header_files
   "${header_path}/cuda/compressor.cuh"
+  "${header_path}/cuda/dictionary.cuh"
+  "${header_path}/cuda/node.cuh"
   "${header_path}/cuda/nvidia_helper.cuh"
 )
 

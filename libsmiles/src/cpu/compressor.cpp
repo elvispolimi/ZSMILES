@@ -1,7 +1,7 @@
 #include "cpu/compressor.hpp"
 
 #include "compression_dictionary.hpp"
-
+#include "cpu/dictionary.hpp"
 #include <algorithm>
 #include <boost/graph/adjacency_list.hpp>
 #include <fstream>

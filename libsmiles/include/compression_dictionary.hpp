@@ -5,9 +5,10 @@
 #include <array>
 #include <string>
 
-#define SMILES_DICT_SIZE 256
-#define SMILES_DICT_NOT_PRINT 33
+#define NOT_PRINTABLE 33
 #define LONGEST_PATTERN 14
+#define PRINTABLE_CHAR (128-NOT_PRINTABLE)
+#define SMILES_DICT_SIZE PRINTABLE_CHAR
 
 namespace smiles {
 
@@ -276,7 +277,4 @@ namespace smiles {
   }};
 
   static constexpr auto smiles_dictionary_escape_char = std::string::value_type{' '};
-
-  dictionary_tree_type build_current_smiles_dictionary(void);
-
 } // namespace smiles
