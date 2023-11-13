@@ -1,4 +1,5 @@
 #include "cpu/compressor.hpp"
+
 #include <boost/program_options/options_description.hpp>
 #include <boost/program_options/parsers.hpp>
 #include <boost/program_options/variables_map.hpp>
@@ -49,7 +50,15 @@ int main(int argc, char* argv[]) {
       // declare the functor that performs the conversion
       smiles::cuda::smiles_compressor compress_cont;
       std::string line;
-      while (std::getline(i_file, line)) { compress_cont(line, o_file); }
+      while (std::getline(i_file, line)) {
+        if (compress_cont.smiles_len.size() >= SMILES_PER_DEVICE) {
+          compress_cont.compute_host(o_file);
+        }
+        assert(plain_description.size() < MAX_SMILES_LEN);
+        compress_cont.smiles_len.push_back(line.size());
+        compress_cont.smiles_host.append(line);
+        compress_cont.smiles_host.insert(compress_cont.smiles_host.end(), MAX_SMILES_LEN - line.size(), '\0');
+      }
       compress_cont.clean_up(o_file);
 #else
       throw std::runtime_error("CUDA implementation required but not available");
@@ -72,26 +81,26 @@ int main(int argc, char* argv[]) {
     i_file.close();
     o_file.close();
   } else if (vm.count("decompress")) {
-//     // declare the functor that performs the conversion
-//     smiles::decompressor_container decompress_cont;
+    //     // declare the functor that performs the conversion
+    //     smiles::decompressor_container decompress_cont;
 
-//     if (vm.count("cuda")) {
-// #ifdef ENABLE_CUDA_IMPLEMENTATION
-//       decompress_cont.create<smiles::cuda::smiles_decompressor>();
-// #else
-//       throw std::runtime_error("CUDA implementation required but not available");
-// #endif
-//     } else
-//       decompress_cont.create<smiles::cpu::smiles_decompressor>();
+    //     if (vm.count("cuda")) {
+    // #ifdef ENABLE_CUDA_IMPLEMENTATION
+    //       decompress_cont.create<smiles::cuda::smiles_decompressor>();
+    // #else
+    //       throw std::runtime_error("CUDA implementation required but not available");
+    // #endif
+    //     } else
+    //       decompress_cont.create<smiles::cpu::smiles_decompressor>();
 
-//     // perform the translation
-//     std::ifstream i_file(input_file);  // Open the file
-//     std::ofstream o_file(output_file); // Open the file
-//     for (std::string line; std::getline(i_file, line); /* automatically handled */) {
-//       o_file << decompress_cont(line) << std::endl;
-//     }
-//     i_file.close();
-//     o_file.close();
+    //     // perform the translation
+    //     std::ifstream i_file(input_file);  // Open the file
+    //     std::ofstream o_file(output_file); // Open the file
+    //     for (std::string line; std::getline(i_file, line); /* automatically handled */) {
+    //       o_file << decompress_cont(line) << std::endl;
+    //     }
+    //     i_file.close();
+    //     o_file.close();
   } else {
     std::cerr << "Error: You must specify either --compress or --decompress." << std::endl;
     return EXIT_FAILURE;
