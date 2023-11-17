@@ -40,10 +40,11 @@ endfunction()
 # define the function to handle compilation flags custom compilation flags
 function(set_cxx_flags target)
   list(APPEND cxx_release_flags "-march=native")
+
   # define the flag to set more warning message during the compilation
-  if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     list(APPEND cxx_flags "-Wall" "-Wextra" "-pedantic")
-  elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "IntelLLVM")
+  elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "IntelLLVM")
     list(APPEND cxx_flags
       "-Weverything"
       "-pedantic"
@@ -52,9 +53,10 @@ function(set_cxx_flags target)
       "-Wno-c++98-compat-pedantic"
       "-Wno-pre-c++14-compat-pedantic")
   endif()
+
   set_target_properties(${target}
     PROPERTIES
-    CXX_STANDARD 17 
+    CXX_STANDARD 17
     CXX_STANDARD_REQUIRED ON
     CXX_EXTENSIONS OFF
   )
@@ -64,22 +66,24 @@ endfunction(set_cxx_flags)
 
 # define the function to handle the CUDA implementation
 function(set_cuda_flags target_name)
-  if (ENABLE_CUDA)
+  if(ENABLE_CUDA)
     set_target_properties(${target_name}
       PROPERTIES
-        CUDA_STANDARD 17
-        CUDA_STANDARD_REQUIRED ON
-        CUDA_EXTENSIONS OFF
-        CUDA_SEPARABLE_COMPILATION ON)
-      list(APPEND cuda_flags
-        "--expt-relaxed-constexpr"
-        "--default-stream" "per-thread"
-        "--use_fast_math"
-        "-expt-relaxed-constexpr"
-        "-Wno-pedantic"
-        "-ftemplate-depth=256")
-      target_compile_options(${target_name} PUBLIC $<$<COMPILE_LANGUAGE:CUDA>:${cuda_flags}>)
-      target_compile_options(${target_name} PUBLIC $<$<AND:$<CONFIG:DEBUG>,$<COMPILE_LANGUAGE:CUDA>>:-G>)
+      CUDA_STANDARD 17
+      CUDA_STANDARD_REQUIRED ON
+      CUDA_EXTENSIONS OFF
+      CUDA_SEPARABLE_COMPILATION ON)
+    list(APPEND cuda_flags
+      "--expt-relaxed-constexpr"
+      "--default-stream" "per-thread"
+      "--use_fast_math"
+      "-expt-relaxed-constexpr"
+      "-Wno-pedantic"
+      "-ftemplate-depth=256")
+    list(APPEND cuda_debug_flags
+      "-G")
+    target_compile_options(${target_name} PUBLIC $<$<COMPILE_LANGUAGE:CUDA>:${cuda_flags}>)
+    target_compile_options(${target_name} PUBLIC $<$<AND:$<CONFIG:DEBUG>,$<COMPILE_LANGUAGE:CUDA>>:${cuda_debug_flags}>)
   endif()
 endfunction()
 

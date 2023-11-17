@@ -2,6 +2,7 @@
 
 #include "compression_dictionary.hpp"
 #include "cpu/dictionary.hpp"
+
 #include <algorithm>
 #include <boost/graph/adjacency_list.hpp>
 #include <fstream>
@@ -104,7 +105,8 @@ namespace smiles {
       { out_s << output_string << std::endl; }
     }
 
-    std::string_view smiles_decompressor::operator()(const std::string_view& compressed_description) {
+    void smiles_decompressor::operator()(const std::string_view& compressed_description,
+                                         std::ofstream& out_s) {
       // decompressing a SMILES is really just a look up on the SMILES_DICTIONARY. We just need to pay attention
       // when the compressed SMILES has excaped something
       // NOTE: we need to start from a clean string
@@ -123,8 +125,9 @@ namespace smiles {
         }
       }
 
-      // construct a view string using the memory owned by our buffer
-      return {scratchpad};
+// construct a view string using the memory owned by our buffer
+#pragma omp critical
+      { out_s << scratchpad << std::endl; }
     }
   } // namespace cpu
 } // namespace smiles

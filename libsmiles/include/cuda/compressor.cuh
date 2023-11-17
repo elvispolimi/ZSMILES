@@ -11,7 +11,7 @@
 #define BLOCK_SIZE WARP_SIZE
 #define GRID_SIZE  512
 
-#define MAX_SMILES_LEN   512
+#define MAX_SMILES_LEN   96
 #define SMILES_PER_BLOCK 128
 
 #define SMILES_PER_DEVICE GRID_SIZE* BLOCK_SIZE* SMILES_PER_BLOCK
@@ -19,23 +19,23 @@
 
 namespace smiles {
   namespace cuda {
-    class smiles_compressor {
+    class base_compressor {
     public:
       using cost_type          = uint_fast16_t;
       using index_type         = int;
       using pattern_index_type = uint_fast8_t;
       using smiles_type        = std::string::value_type;
       // pre-allocate memory to avoid useless memory operations
-      smiles_compressor();
-      ~smiles_compressor();
+      base_compressor();
+      ~base_compressor();
 
       std::string smiles_host;
-      smiles_type* smiles_dev;
+      std::vector<index_type> smiles_index;
       std::vector<index_type> smiles_len;
-      index_type* smiles_len_dev;
 
-      pattern_index_type* match_matrix_dev;
-      pattern_index_type* dijkstra_matrix_dev;
+      smiles_type* smiles_dev;
+      index_type* smiles_index_dev;
+      index_type* smiles_len_dev;
 
       std::string smiles_output_host;
       smiles_type* smiles_output_dev;
@@ -43,16 +43,28 @@ namespace smiles {
 
       std::string temp_out;
       std::vector<index_type> temp_len;
-
-      void compute_host(std::ofstream& out_s);
-      void copy_out(std::ofstream& out_s);
+      std::vector<index_type> temp_index;
+    };
+    class smiles_compressor: public base_compressor {
+    public:
+      void compress(std::ofstream& out_s);
       void clean_up(std::ofstream& out_s);
+      void copy_out(std::ofstream& out_s);
+
+      smiles_compressor();
+      ~smiles_compressor();
+
+    private:
+      pattern_index_type* match_matrix_dev;
+      pattern_index_type* dijkstra_matrix_dev;
     };
 
-    class smiles_decompressor {
+    class smiles_decompressor: public base_compressor {
     public:
-      smiles_decompressor() {} // pre-allocate
-      std::string_view operator()(const std::string_view& compressed_description);
+      smiles_decompressor();
+      void decompress(std::ofstream& out_s);
+      void clean_up(std::ofstream& out_s);
+      void copy_out(std::ofstream& out_s);
     };
   } // namespace cuda
 } // namespace smiles

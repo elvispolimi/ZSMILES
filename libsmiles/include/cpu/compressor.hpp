@@ -1,12 +1,13 @@
 #pragma once
 
+#include <fstream>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace smiles {
   namespace cpu {
-    class smiles_compressor{
+    class smiles_compressor {
       using char_type = std::string::value_type;
 
       std::string output_string; // we need this buffer to minimize memory allocation/deallocation
@@ -23,14 +24,14 @@ namespace smiles {
       void operator()(const std::string_view& plain_description, std::ofstream&);
     };
 
-    class smiles_decompressor{
+    class smiles_decompressor {
       using char_type = std::string::value_type;
 
       std::string scratchpad; // we need this buffer to minimize memory allocation/deallocation
 
     public:
       smiles_decompressor(void) { scratchpad.reserve(2000); } // pre-allocate
-      std::string_view operator()(const std::string_view& compressed_description);
+      void operator()(const std::string_view& compressed_description, std::ofstream&);
     };
   } // namespace cpu
 } // namespace smiles
