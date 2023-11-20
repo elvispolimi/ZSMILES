@@ -247,12 +247,11 @@ namespace smiles {
 
       // The copy back is SYNC
       smiles_output_host.clear();
-      smiles_output_host.resize((smiles_index_out.back() + smiles_len.back() * 2));
-      CHECK_CUDA_KERNEL_ERRORS(
-          cudaMemcpy((void*) smiles_output_host.data(),
-                     smiles_output_dev,
-                     (temp_len.back() * 2 + 1 + temp_index_out.back()) * sizeof(smiles_type),
-                     cudaMemcpyDeviceToHost));
+      smiles_output_host.resize((temp_index_out.back() + temp_len.back() * 2 + 1));
+      CHECK_CUDA_KERNEL_ERRORS(cudaMemcpy((void*) smiles_output_host.data(),
+                                          smiles_output_dev,
+                                          smiles_output_host.size() * sizeof(smiles_type),
+                                          cudaMemcpyDeviceToHost));
       temp_out.clear();
       temp_out.reserve(temp_len.back() * 2 + 1 + temp_index_out.back());
       // Print output
@@ -274,7 +273,7 @@ namespace smiles {
 
       // The copy back is SYNC
       smiles_output_host.clear();
-      smiles_output_host.resize((smiles_index_out.back() + smiles_len.back() * LONGEST_PATTERN + 1));
+      smiles_output_host.resize((temp_index_out.back() + temp_len.back() * LONGEST_PATTERN + 1));
       CHECK_CUDA_KERNEL_ERRORS(cudaMemcpy((void*) smiles_output_host.data(),
                                           smiles_output_dev,
                                           smiles_output_host.size() * sizeof(smiles_type),
