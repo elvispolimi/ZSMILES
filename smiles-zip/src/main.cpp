@@ -6,14 +6,20 @@
 #include <boost/program_options/parsers.hpp>
 #include <boost/program_options/variables_map.hpp>
 #include <cstdlib>
+#include <fcntl.h>
 #include <filesystem>
 #include <fstream>
 #include <ios>
 #include <iostream>
 #include <string>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
 namespace po = boost::program_options;
 
 #include "compressor_implementations.hpp"
+
+#define BUFFER_SIZE 1024 * 16
 
 int main(int argc, char* argv[]) {
   std::string input_file;
@@ -99,17 +105,106 @@ int main(int argc, char* argv[]) {
       // declare the functor that performs the conversion
       smiles::cuda::smiles_decompressor decompress_cont;
       std::string line;
-      while (std::getline(i_file, line)) {
+
+      int fd = open(input_file.c_str(), O_RDONLY);
+      if (fd == -1) {
+        std::cerr << "Failed to open file: " << input_file << std::endl;
+        return EXIT_FAILURE;
+      }
+
+      struct stat sb;
+      if (fstat(fd, &sb) == -1) {
+        std::cerr << "Failed to get file size: " << input_file << std::endl;
+        close(fd);
+        return EXIT_FAILURE;
+      }
+
+      char* file_data = static_cast<char*>(mmap(nullptr, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0));
+      if (file_data == MAP_FAILED) {
+        std::cerr << "Failed to map file: " << input_file << std::endl;
+        close(fd);
+        return EXIT_FAILURE;
+      }
+
+      const char* start = file_data;
+      const char* end   = file_data + sb.st_size;
+      while (start < end) {
+        const char* next = static_cast<const char*>(memchr(start, '\n', end - start));
+        if (next == nullptr) {
+          next = end;
+        }
+        const auto str_v = std::string_view(start, next - start);
+
+        auto prev_end = decompress_cont.smiles_index_out.size() == 0
+                            ? 0
+                            : decompress_cont.smiles_index_out.back() +
+                                  (decompress_cont.smiles_len.back()) * LONGEST_PATTERN + 1;
         if ((decompress_cont.smiles_index.size() > 0 &&
-             (decompress_cont.smiles_index.back() + decompress_cont.smiles_len.back()) * LONGEST_PATTERN >=
-                 CHAR_PER_DEVICE) ||
+             (prev_end + str_v.size() * LONGEST_PATTERN + 1) >= CHAR_PER_DEVICE) ||
             decompress_cont.smiles_len.size() >= SMILES_PER_DEVICE) {
           decompress_cont.decompress(o_file);
         }
+
+        prev_end = decompress_cont.smiles_index_out.size() == 0
+                       ? 0
+                       : decompress_cont.smiles_index_out.back() +
+                             (decompress_cont.smiles_len.back()) * LONGEST_PATTERN + 1;
+
         decompress_cont.smiles_index.push_back(decompress_cont.smiles_host.size());
-        decompress_cont.smiles_len.push_back(line.size());
-        decompress_cont.smiles_host.append(line);
+        // TODO check if the +1 is needed for the terminator char
+        decompress_cont.smiles_index_out.push_back(prev_end);
+        decompress_cont.smiles_len.push_back(str_v.size());
+        decompress_cont.smiles_host.append(str_v);
+
+        start = next + 1;
       }
+
+      munmap(file_data, sb.st_size);
+      close(fd);
+
+      // char buffer[BUFFER_SIZE];
+      // while (i_file.read(buffer, sizeof(buffer))) {
+      //   long pos = 0;
+      //   while (pos < i_file.gcount()) {
+      //     long end = pos;
+      //     int i    = 0;
+      //     while (end < i_file.gcount() && buffer[end] != '\n') {
+      //       ++end;
+      //       i++;
+      //     }
+
+      //     // TODO check if the value SMILES_PER_DEVICE should be increased
+      //     if ((decompress_cont.smiles_index.size() > 0 &&
+      //          (decompress_cont.smiles_index.back() + decompress_cont.smiles_len.back() + i) >=
+      //              CHAR_PER_DEVICE / LONGEST_PATTERN) ||
+      //         decompress_cont.smiles_len.size() >= SMILES_PER_DEVICE) {
+      //       decompress_cont.decompress(o_file);
+      //     }
+      //     decompress_cont.smiles_index.push_back(decompress_cont.smiles_host.size());
+      //     // TODO check if the +1 is needed for the terminator char
+      //     const auto prev_end = decompress_cont.smiles_index_out.size() == 0
+      //                               ? 0
+      //                               : decompress_cont.smiles_index_out.back() +
+      //                                     (decompress_cont.smiles_len.back()) * LONGEST_PATTERN;
+      //     decompress_cont.smiles_index_out.push_back(prev_end);
+      //     decompress_cont.smiles_len.push_back(i);
+      //     decompress_cont.smiles_host.append(buffer + pos, i);
+      //     pos = end + 1;
+      //   }
+      // }
+
+      // TODO check fastest reading method
+      // while (std::getline(i_file, line)) {
+      //   if ((decompress_cont.smiles_index.size() > 0 &&
+      //        (decompress_cont.smiles_index.back() + decompress_cont.smiles_len.back()) * LONGEST_PATTERN >=
+      //            CHAR_PER_DEVICE) ||
+      //       decompress_cont.smiles_len.size() >= SMILES_PER_DEVICE) {
+      //     decompress_cont.decompress(o_file);
+      //   }
+      //   decompress_cont.smiles_index.push_back(decompress_cont.smiles_host.size());
+      //   decompress_cont.smiles_len.push_back(line.size());
+      //   decompress_cont.smiles_host.append(line);
+      // }
 
       decompress_cont.clean_up(o_file);
 #else

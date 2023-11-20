@@ -1,6 +1,5 @@
 import argparse
 import pathlib
-import typing
 from typing import Dict, List
 
 
