@@ -100,9 +100,8 @@ namespace smiles {
         }
       }
 
-// when we reached this point we have correctly compressed the SMILES, we can return it
-#pragma omp critical
-      { out_s << output_string << std::endl; }
+      // when we reached this point we have correctly compressed the SMILES, we can return it
+      out_s << output_string << std::endl;
     }
 
     void smiles_decompressor::operator()(const std::string_view& compressed_description,
@@ -125,9 +124,8 @@ namespace smiles {
         }
       }
 
-// construct a view string using the memory owned by our buffer
-#pragma omp critical
-      { out_s << scratchpad << std::endl; }
+      // construct a view string using the memory owned by our buffer
+      out_s << scratchpad << std::endl;
     }
   } // namespace cpu
 } // namespace smiles
