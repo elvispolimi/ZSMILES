@@ -9,6 +9,7 @@
 #define LONGEST_PATTERN 14
 #define PRINTABLE_CHAR (128-NOT_PRINTABLE)
 #define SMILES_DICT_SIZE PRINTABLE_CHAR
+#define DICT_SIZE 256
 
 namespace smiles {
 
@@ -17,7 +18,7 @@ namespace smiles {
     std::string::size_type size;
   };
 
-  static constexpr std::array<smiles_dictionary_entry, 256> SMILES_DICTIONARY = {{
+  static constexpr std::array<smiles_dictionary_entry, DICT_SIZE> SMILES_DICTIONARY = {{
       {"ERROR", 5}, // to avoid non-printable character no 0
       {"ERROR", 5}, // to avoid non-printable character no 1
       {"ERROR", 5}, // to avoid non-printable character no 2

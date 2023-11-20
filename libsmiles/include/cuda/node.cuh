@@ -15,6 +15,7 @@ namespace smiles {
 
       node_letter pattern = 0;
       node_letter letter;
+      // Sometimes it could be necessary to use short
       char neighbor[PRINTABLE_CHAR];
 
       constexpr node(node_letter letter): letter(letter), neighbor{} {

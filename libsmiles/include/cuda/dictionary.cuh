@@ -21,9 +21,9 @@ namespace smiles {
       constexpr smiles_dictionary_entry_gpu(): size(0), pattern(){};
     };
 
-    constexpr std::array<smiles_dictionary_entry_gpu, 256> build_gpu_smiles_dictionary_entries() {
-      std::array<smiles_dictionary_entry_gpu, 256> n{};
-      for (int i = 0; i < 256; i++) {
+    constexpr std::array<smiles_dictionary_entry_gpu, DICT_SIZE> build_gpu_smiles_dictionary_entries() {
+      std::array<smiles_dictionary_entry_gpu, DICT_SIZE> n{};
+      for (int i = 0; i < DICT_SIZE; i++) {
         n[i] = smiles_dictionary_entry_gpu(SMILES_DICTIONARY[i].size, SMILES_DICTIONARY[i].pattern);
       }
       return n;

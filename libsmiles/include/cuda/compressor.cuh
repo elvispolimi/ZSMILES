@@ -5,7 +5,6 @@
 
 #include <string>
 #include <string_view>
-#include <thread>
 #include <vector>
 
 #define WARP_SIZE  32
@@ -32,10 +31,12 @@ namespace smiles {
 
       std::string smiles_host;
       std::vector<index_type> smiles_index;
+      std::vector<index_type> smiles_index_out;
       std::vector<index_type> smiles_len;
 
       smiles_type* smiles_dev;
       index_type* smiles_index_dev;
+      index_type* smiles_index_out_dev;
       index_type* smiles_len_dev;
 
       std::string smiles_output_host;
@@ -44,7 +45,7 @@ namespace smiles {
 
       std::string temp_out;
       std::vector<index_type> temp_len;
-      std::vector<index_type> temp_index;
+      std::vector<index_type> temp_index_out;
     };
     class smiles_compressor: public base_compressor {
     public:
@@ -67,13 +68,6 @@ namespace smiles {
       void decompress(std::ofstream& out_s);
       void clean_up(std::ofstream& out_s);
       void copy_out(std::ofstream& out_s);
-
-      std::vector<index_type> smiles_index_out;
-
-    private:
-      index_type* smiles_index_out_dev;
-      std::vector<index_type> temp_index_out;
-      std::thread thread;
     };
   } // namespace cuda
 } // namespace smiles
