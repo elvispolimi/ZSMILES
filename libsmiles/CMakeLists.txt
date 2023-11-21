@@ -16,20 +16,34 @@ list(APPEND source_files
   "${source_path}/cpu/dictionary.cpp"
 )
 
+list(APPEND gpu_header_files
+  "${header_path}/gpu/compressor.hpp"
+  "${header_path}/gpu/dictionary.hpp"
+  "${header_path}/gpu/node.hpp"
+)
+
 list(APPEND cuda_header_files
-  "${header_path}/cuda/compressor.cuh"
-  "${header_path}/cuda/dictionary.cuh"
-  "${header_path}/cuda/node.cuh"
   "${header_path}/cuda/nvidia_helper.cuh"
 )
 
-list(APPEND cuda_source_files
-  "${source_path}/cuda/compressor.cu"
+list(APPEND hip_header_files
+  "${header_path}/hip/nvidia_helper.hpp"
 )
 
-if(ENABLE_CUDA)
-  list(APPEND source_files ${cuda_source_files})
-  list(APPEND header_files ${cuda_header_files})
+list(APPEND hip_source_files
+  "${source_path}/hip/compressor.cpp"
+)
+
+if(ENABLE_CUDA OR ENABLE_HIP)
+  list(APPEND header_files ${gpu_header_files})
+  if(ENABLE_CUDA)
+    list(APPEND source_files ${cuda_source_files})
+    list(APPEND header_files ${cuda_header_files})
+  endif()
+  if(ENABLE_HIP)
+    list(APPEND source_files ${hip_source_files})
+    list(APPEND header_files ${hip_header_files})
+  endif()
 endif()
 
 #########################################################################
@@ -51,6 +65,9 @@ if(ENABLE_CUDA)
   target_compile_options(libsmiles PUBLIC $<$<AND:$<CONFIG:DEBUG>,$<COMPILE_LANGUAGE:CUDA>>:-G>)
 endif()
 if(ENABLE_OPENMP)
+  target_link_libraries(libsmiles PRIVATE OpenMP::OpenMP_CXX)
+endif()
+if(ENABLE_HIP)
   target_link_libraries(libsmiles PRIVATE OpenMP::OpenMP_CXX)
 endif()
 

@@ -5,6 +5,7 @@ project(smiles-zip VERSION 0.1)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(ENABLE_CUDA "Enable CUDA implementations" OFF)
+option(ENABLE_CUDA "Enable HIP implementations" OFF)
 option(ENABLE_OPENMP "Enable OpenMP implementations" OFF)
 set(GPU_ARCHITECTURE "none" CACHE STRING "Optimize for the target GPU architecture (none to disable)")
 set_property(CACHE GPU_ARCHITECTURE PROPERTY STRINGS ${gpu_architectures})
@@ -19,6 +20,10 @@ if(ENABLE_CUDA)
 
   enable_language(CUDA)
   find_package(CUDAToolkit)
+endif()
+
+if(ENABLE_HIP)
+  find_package(hip)
 endif()
 
 if(ENABLE_OPENMP)
