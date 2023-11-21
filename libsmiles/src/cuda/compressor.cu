@@ -103,11 +103,11 @@ namespace smiles {
       const int stride        = blockDim.x;
       const int matrix_offset = MAX_SMILES_LEN * LONGEST_PATTERN * blockId;
 
-      const int* smiles_len_l                                = smiles_len + blockId;
+      const base_compressor::index_type* smiles_len_l                                = smiles_len + blockId;
       base_compressor::pattern_index_type* match_matrix_l    = match_matrix + matrix_offset;
       base_compressor::pattern_index_type* dijkstra_matrix_l = dijkstra_matrix + matrix_offset;
       for (int id = blockId; id < num_smiles; id += stride_smile, smiles_len_l += stride_smile) {
-        const int smile_len                             = *smiles_len_l;
+        const base_compressor::index_type smile_len                             = *smiles_len_l;
         const base_compressor::smiles_type* smiles_in_l = smiles_in + smiles_in_index[id];
         base_compressor::smiles_type* smiles_out_l      = smiles_out + smiles_out_index[id];
 
@@ -317,9 +317,9 @@ namespace smiles {
       const int stride_smile = gridDim.x;
       const int stride       = blockDim.x;
 
-      const int* smiles_len_l = smiles_len + blockId;
+      const base_compressor::index_type* smiles_len_l = smiles_len + blockId;
       for (int id = blockId; id < num_smiles; id += stride_smile, smiles_len_l += stride_smile) {
-        const int smile_len                             = *smiles_len_l;
+        const base_compressor::index_type smile_len                             = *smiles_len_l;
         unsigned long last_index                        = 0;
         const base_compressor::smiles_type* smiles_in_l = smiles_in + smiles_in_index[id];
         base_compressor::smiles_type* smiles_out_l      = smiles_out + smiles_out_index[id];
