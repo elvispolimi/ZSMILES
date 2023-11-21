@@ -17,6 +17,3 @@ target_link_libraries(smiles-zip PRIVATE Boost::program_options smiles::libsmile
 if(ENABLE_CUDA)
   target_link_libraries(smiles-zip PRIVATE CUDA::cudart)
 endif()
-if(ENABLE_OPENMP)
-  target_link_libraries(smiles-zip PRIVATE OpenMP::OpenMP_CXX)
-endif()

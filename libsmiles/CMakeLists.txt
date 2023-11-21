@@ -50,10 +50,6 @@ if(ENABLE_CUDA)
   target_compile_definitions(libsmiles PUBLIC ENABLE_CUDA_IMPLEMENTATION)
   target_compile_options(libsmiles PUBLIC $<$<AND:$<CONFIG:DEBUG>,$<COMPILE_LANGUAGE:CUDA>>:-G>)
 endif()
-if(ENABLE_OPENMP)
-  target_link_libraries(libsmiles PRIVATE OpenMP::OpenMP_CXX)
-endif()
-
 
 # set its name to avoid the double lib
 set_target_properties(libsmiles PROPERTIES PREFIX "" OUTPUT_NAME "libsmiles")
