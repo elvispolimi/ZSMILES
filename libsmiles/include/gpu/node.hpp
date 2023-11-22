@@ -7,7 +7,7 @@
 #include <cstring>
 
 namespace smiles {
-  namespace cuda {
+  namespace gpu {
     class node {
     public:
       using node_letter   = char;
@@ -28,5 +28,5 @@ namespace smiles {
         constexpr_for<0, PRINTABLE_CHAR, 1>([&](auto index) { neighbor[index] = 0; });
       };
     };
-  } // namespace cuda
+  } // namespace gpu
 } // namespace smiles

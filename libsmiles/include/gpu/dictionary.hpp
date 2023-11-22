@@ -1,14 +1,14 @@
 #pragma once
 
 #include "compression_dictionary.hpp"
-#include "cuda/node.cuh"
+#include "gpu/node.hpp"
 
 #include <vector>
 
 #define GPU_DICT_SIZE 429
 
 namespace smiles {
-  namespace cuda {
+  namespace gpu {
     class smiles_dictionary_entry_gpu {
     public:
       std::string::size_type size;
@@ -891,5 +891,5 @@ namespace smiles {
       n[427].neighbor[34] = 1;
       return n;
     }
-  } // namespace cuda
+  } // namespace gpu
 } // namespace smiles

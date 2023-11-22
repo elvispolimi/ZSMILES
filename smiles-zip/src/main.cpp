@@ -33,8 +33,8 @@ int main(int argc, char* argv[]) {
   app_description.add_options()("output-file,o", po::value<std::string>(&output_file), "Output file");
   app_description.add_options()("compress,c", "Compress the input file");
   app_description.add_options()("verbose,v", "Verbose output and stats");
-  // TODO at the moment single GPU
   app_description.add_options()("cuda", "Enable cuda implementation");
+  app_description.add_options()("hip", "Enable hip implementation");
   app_description.add_options()("decompress,d", "Decompress the input file");
   po::store(po::command_line_parser(argc, argv).options(app_description).run(), vm);
   if (vm.count("help") > 0) {
@@ -88,6 +88,33 @@ int main(int argc, char* argv[]) {
 #else
       throw std::runtime_error("CUDA implementation required but not available");
 #endif
+    } else if (vm.count("hip")) {
+#ifdef ENABLE_HIP_IMPLEMENTATION
+      // declare the functor that performs the conversion
+      smiles::hip::smiles_compressor compress_cont;
+      std::string line;
+      while (std::getline(i_file, line)) {
+        auto prev_end =
+            compress_cont.smiles_index_out.size() == 0
+                ? 0
+                : compress_cont.smiles_index_out.back() + (compress_cont.smiles_len.back()) * 2 + 1;
+        if ((compress_cont.smiles_index.size() > 0 && (prev_end + line.size() * 2 + 1) >= CHAR_PER_DEVICE) ||
+            compress_cont.smiles_len.size() >= SMILES_PER_DEVICE) {
+          compress_cont.compress(o_file);
+        }
+        assert(line.size() < MAX_SMILES_LEN);
+        prev_end = compress_cont.smiles_index_out.size() == 0
+                       ? 0
+                       : compress_cont.smiles_index_out.back() + (compress_cont.smiles_len.back()) * 2 + 1;
+        compress_cont.smiles_index.push_back(compress_cont.smiles_host.size());
+        compress_cont.smiles_index_out.push_back(prev_end);
+        compress_cont.smiles_len.push_back(line.size());
+        compress_cont.smiles_host.append(line);
+      }
+      compress_cont.clean_up(o_file);
+#else
+      throw std::runtime_error("HIP implementation required but not available");
+#endif
     } else {
       smiles::cpu::smiles_compressor compress_cont;
 
@@ -134,6 +161,39 @@ int main(int argc, char* argv[]) {
       decompress_cont.clean_up(o_file);
 #else
       throw std::runtime_error("CUDA implementation required but not available");
+#endif
+    } else if (vm.count("hip")) {
+#ifdef ENABLE_HIP_IMPLEMENTATION
+      // declare the functor that performs the conversion
+      smiles::hip::smiles_decompressor decompress_cont;
+      std::string line;
+
+      while (std::getline(i_file, line)) {
+        auto prev_end = decompress_cont.smiles_index_out.size() == 0
+                            ? 0
+                            : decompress_cont.smiles_index_out.back() +
+                                  (decompress_cont.smiles_len.back()) * LONGEST_PATTERN + 1;
+        if ((decompress_cont.smiles_index.size() > 0 &&
+             (prev_end + line.size() * LONGEST_PATTERN + 1) >= CHAR_PER_DEVICE) ||
+            decompress_cont.smiles_len.size() >= SMILES_PER_DEVICE) {
+          decompress_cont.decompress(o_file);
+        }
+
+        prev_end = decompress_cont.smiles_index_out.size() == 0
+                       ? 0
+                       : decompress_cont.smiles_index_out.back() +
+                             (decompress_cont.smiles_len.back()) * LONGEST_PATTERN + 1;
+
+        decompress_cont.smiles_index.push_back(decompress_cont.smiles_host.size());
+        // TODO check if the +1 is needed for the terminator char
+        decompress_cont.smiles_index_out.push_back(prev_end);
+        decompress_cont.smiles_len.push_back(line.size());
+        decompress_cont.smiles_host.append(line);
+      }
+
+      decompress_cont.clean_up(o_file);
+#else
+      throw std::runtime_error("HIP implementation required but not available");
 #endif
     } else {
       std::string line;

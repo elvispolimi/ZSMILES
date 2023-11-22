@@ -1,16 +1,21 @@
+#include "hip/compressor.hpp"
+
 #include "compression_dictionary.hpp"
-#include "cuda/compressor.cuh"
 #include "gpu/dictionary.hpp"
-#include "cuda/nvidia_helper.cuh"
+#include "hip/hip_helper.hpp"
+
 #include "utils.hpp"
 
 #include <algorithm>
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-#include <cuda_runtime.h>
 #include <fstream>
+#include <hip/hip_runtime.h>
+#include <hip/hip_runtime_api.h>
+// #include <hip/nvidia_detail/nvidia_hip_runtime_api.h>
 #include <iostream>
 #include <limits>
 #include <pthread.h>
@@ -19,73 +24,73 @@
 #include <vector>
 
 namespace smiles {
-  namespace cuda {
+  namespace hip {
     const __device__ __constant__ gpu::node dictionary_tree_gpu[GPU_DICT_SIZE];
     const __device__ __constant__ gpu::smiles_dictionary_entry_gpu smiles_dictionary_gpu[DICT_SIZE];
 
     base_compressor::base_compressor() {
-      CHECK_CUDA_KERNEL_ERRORS(cudaMalloc(&smiles_len_dev, SMILES_PER_DEVICE * sizeof(index_type)));
-      CHECK_CUDA_KERNEL_ERRORS(cudaMalloc(&smiles_index_dev, SMILES_PER_DEVICE * sizeof(index_type)));
-      CHECK_CUDA_KERNEL_ERRORS(cudaMalloc(&smiles_index_out_dev, SMILES_PER_DEVICE * sizeof(index_type)));
+      CHECK_HIP_KERNEL_ERRORS(hipMalloc(&smiles_len_dev, SMILES_PER_DEVICE * sizeof(index_type)));
+      CHECK_HIP_KERNEL_ERRORS(hipMalloc(&smiles_index_dev, SMILES_PER_DEVICE * sizeof(index_type)));
+      CHECK_HIP_KERNEL_ERRORS(hipMalloc(&smiles_index_out_dev, SMILES_PER_DEVICE * sizeof(index_type)));
     };
 
     base_compressor::~base_compressor() {
       if (smiles_len_dev != nullptr)
-        CHECK_CUDA_KERNEL_ERRORS(cudaFree(smiles_len_dev));
+        CHECK_HIP_KERNEL_ERRORS(hipFree(smiles_len_dev));
       if (smiles_index_dev != nullptr)
-        CHECK_CUDA_KERNEL_ERRORS(cudaFree(smiles_index_dev));
+        CHECK_HIP_KERNEL_ERRORS(hipFree(smiles_index_dev));
       if (smiles_index_out_dev != nullptr)
-        CHECK_CUDA_KERNEL_ERRORS(cudaFree(smiles_index_out_dev));
+        CHECK_HIP_KERNEL_ERRORS(hipFree(smiles_index_out_dev));
     }
 
     smiles_compressor::smiles_compressor() {
       smiles_host.reserve(CHAR_PER_DEVICE);
       smiles_output_host.resize(CHAR_PER_DEVICE);
-      CHECK_CUDA_KERNEL_ERRORS(cudaMalloc(&smiles_dev, CHAR_PER_DEVICE / 2 * sizeof(smiles_type)));
-      CHECK_CUDA_KERNEL_ERRORS(
-          cudaMalloc(&match_matrix_dev,
-                     MAX_SMILES_LEN * GRID_SIZE * LONGEST_PATTERN * sizeof(pattern_index_type)));
-      CHECK_CUDA_KERNEL_ERRORS(
-          cudaMalloc(&dijkstra_matrix_dev,
-                     MAX_SMILES_LEN * GRID_SIZE * LONGEST_PATTERN * sizeof(pattern_index_type)));
-      CHECK_CUDA_KERNEL_ERRORS(cudaMemcpyToSymbol(dictionary_tree_gpu,
-                                                 gpu:: build_gpu_smiles_dictionary().data(),
-                                                  sizeof(gpu::node) * GPU_DICT_SIZE,
-                                                  0,
-                                                  cudaMemcpyHostToDevice));
+      CHECK_HIP_KERNEL_ERRORS(hipMalloc(&smiles_dev, CHAR_PER_DEVICE / 2 * sizeof(smiles_type)));
+      CHECK_HIP_KERNEL_ERRORS(
+          hipMalloc(&match_matrix_dev,
+                    MAX_SMILES_LEN * GRID_SIZE * LONGEST_PATTERN * sizeof(pattern_index_type)));
+      CHECK_HIP_KERNEL_ERRORS(
+          hipMalloc(&dijkstra_matrix_dev,
+                    MAX_SMILES_LEN * GRID_SIZE * LONGEST_PATTERN * sizeof(pattern_index_type)));
+      CHECK_HIP_KERNEL_ERRORS(hipMemcpyToSymbol(HIP_SYMBOL(dictionary_tree_gpu),
+                                                gpu::build_gpu_smiles_dictionary().data(),
+                                                sizeof(gpu::node) * GPU_DICT_SIZE,
+                                                0,
+                                                hipMemcpyHostToDevice));
       // We assume that the output smiles len does not exceed the length of the input one
-      CHECK_CUDA_KERNEL_ERRORS(cudaMalloc(&smiles_output_dev, CHAR_PER_DEVICE * sizeof(smiles_type)));
+      CHECK_HIP_KERNEL_ERRORS(hipMalloc(&smiles_output_dev, CHAR_PER_DEVICE * sizeof(smiles_type)));
     };
 
     smiles_compressor::~smiles_compressor() {
       if (smiles_dev != nullptr)
-        CHECK_CUDA_KERNEL_ERRORS(cudaFree(smiles_dev));
+        CHECK_HIP_KERNEL_ERRORS(hipFree(smiles_dev));
       if (match_matrix_dev != nullptr)
-        CHECK_CUDA_KERNEL_ERRORS(cudaFree(match_matrix_dev));
+        CHECK_HIP_KERNEL_ERRORS(hipFree(match_matrix_dev));
       if (dijkstra_matrix_dev != nullptr)
-        CHECK_CUDA_KERNEL_ERRORS(cudaFree(dijkstra_matrix_dev));
+        CHECK_HIP_KERNEL_ERRORS(hipFree(dijkstra_matrix_dev));
       if (smiles_output_dev != nullptr)
-        CHECK_CUDA_KERNEL_ERRORS(cudaFree(smiles_output_dev));
+        CHECK_HIP_KERNEL_ERRORS(hipFree(smiles_output_dev));
     }
 
     smiles_decompressor::smiles_decompressor() {
       smiles_host.reserve(CHAR_PER_DEVICE / LONGEST_PATTERN);
       smiles_output_host.resize(CHAR_PER_DEVICE);
-      CHECK_CUDA_KERNEL_ERRORS(
-          cudaMalloc(&smiles_dev, CHAR_PER_DEVICE / LONGEST_PATTERN * sizeof(smiles_type)));
-      CHECK_CUDA_KERNEL_ERRORS(cudaMalloc(&smiles_output_dev, CHAR_PER_DEVICE * sizeof(smiles_type)));
-      CHECK_CUDA_KERNEL_ERRORS(cudaMemcpyToSymbol(smiles_dictionary_gpu,
-                                                  gpu::build_gpu_smiles_dictionary_entries().data(),
-                                                  sizeof(gpu::smiles_dictionary_entry_gpu) * DICT_SIZE,
-                                                  0,
-                                                  cudaMemcpyHostToDevice));
+      CHECK_HIP_KERNEL_ERRORS(
+          hipMalloc(&smiles_dev, CHAR_PER_DEVICE / LONGEST_PATTERN * sizeof(smiles_type)));
+      CHECK_HIP_KERNEL_ERRORS(hipMalloc(&smiles_output_dev, CHAR_PER_DEVICE * sizeof(smiles_type)));
+      CHECK_HIP_KERNEL_ERRORS(hipMemcpyToSymbol(smiles_dictionary_gpu,
+                                                gpu::build_gpu_smiles_dictionary_entries().data(),
+                                                sizeof(gpu::smiles_dictionary_entry_gpu) * DICT_SIZE,
+                                                0,
+                                                hipMemcpyHostToDevice));
     }
 
     smiles_decompressor::~smiles_decompressor() {
       if (smiles_dev != nullptr)
-        CHECK_CUDA_KERNEL_ERRORS(cudaFree(smiles_dev));
+        CHECK_HIP_KERNEL_ERRORS(hipFree(smiles_dev));
       if (smiles_output_dev != nullptr)
-        CHECK_CUDA_KERNEL_ERRORS(cudaFree(smiles_output_dev));
+        CHECK_HIP_KERNEL_ERRORS(hipFree(smiles_output_dev));
     }
 
     __global__ void compress_gpu(const base_compressor::smiles_type* __restrict__ smiles_in,
@@ -102,27 +107,27 @@ namespace smiles {
       const int stride        = blockDim.x;
       const int matrix_offset = MAX_SMILES_LEN * LONGEST_PATTERN * blockId;
 
-      const base_compressor::index_type* smiles_len_l        = smiles_len + blockId;
+      const size_t* smiles_len_l                             = smiles_len + blockId;
       base_compressor::pattern_index_type* match_matrix_l    = match_matrix + matrix_offset;
       base_compressor::pattern_index_type* dijkstra_matrix_l = dijkstra_matrix + matrix_offset;
       for (int id = blockId; id < num_smiles; id += stride_smile, smiles_len_l += stride_smile) {
-        const base_compressor::index_type smile_len     = *smiles_len_l;
+        const size_t smile_len                          = *smiles_len_l;
         const base_compressor::smiles_type* smiles_in_l = smiles_in + smiles_in_index[id];
         base_compressor::smiles_type* smiles_out_l      = smiles_out + smiles_out_index[id];
 
         assert(smile_len < MAX_SMILES_LEN);
         // for (int i = threadId; i < smile_len; i += stride) smiles_s[i] = smiles_in_l[i];
         const base_compressor::smiles_type* smiles_s = smiles_in_l;
-        __syncwarp();
+        SYNC;
 #pragma unroll 8
         for (int i = 0; i < LONGEST_PATTERN; i++)
           for (int j = threadId; j <= smile_len; j += stride) match_matrix_l[LONGEST_PATTERN * j + i] = 0;
-        __syncwarp();
+        SYNC;
         // For each position in the input string
 
         for (int i = threadId; i < smile_len; i += stride) {
           const gpu::node* curr = dictionary_tree_gpu;
-          int curr_id      = 0;
+          int curr_id           = 0;
 #pragma unroll 8
           for (int j = 0; j < LONGEST_PATTERN && curr && j < (smile_len - i); j++) {
             const int next_i = curr->neighbor[smiles_s[i + j] - NOT_PRINTABLE];
@@ -142,7 +147,7 @@ namespace smiles {
             dijkstra_matrix_l[i * MAX_SMILES_LEN + j] =
                 std::numeric_limits<base_compressor::pattern_index_type>().max();
           }
-        __syncwarp();
+        SYNC;
         if (threadId % WARP_SIZE == 0) {
           dijkstra_matrix_l[smile_len]                      = 0;
           dijkstra_matrix_l[MAX_SMILES_LEN + smile_len]     = 0;
@@ -172,7 +177,7 @@ namespace smiles {
                 match_matrix_l[best_index + (l + best_index) * LONGEST_PATTERN];
           }
         }
-        __syncwarp();
+        SYNC;
         // TODO you can parallelize and then make a reduction performed only by threadID 0
         if (threadId % WARP_SIZE == 0) {
           int o = 0;
@@ -193,7 +198,7 @@ namespace smiles {
           assert(o < smile_len * 2 + 1);
           smiles_out_l[o] = '\0';
         }
-        __syncwarp();
+        SYNC;
       }
     }
 
@@ -201,22 +206,22 @@ namespace smiles {
       if (need_clean_up)
         copy_out(out_s);
       // TODO allocate for smiles_len worst case but then pass where the smiles begin to reduce the copied amount of data
-      CHECK_CUDA_KERNEL_ERRORS(cudaMemcpy(smiles_dev,
-                                          smiles_host.data(),
-                                          (smiles_len.back() + smiles_index.back()) * sizeof(smiles_type),
-                                          cudaMemcpyHostToDevice));
-      CHECK_CUDA_KERNEL_ERRORS(cudaMemcpy(smiles_len_dev,
-                                          smiles_len.data(),
-                                          smiles_len.size() * sizeof(index_type),
-                                          cudaMemcpyHostToDevice));
-      CHECK_CUDA_KERNEL_ERRORS(cudaMemcpy(smiles_index_dev,
-                                          smiles_index.data(),
-                                          smiles_index.size() * sizeof(index_type),
-                                          cudaMemcpyHostToDevice));
-      CHECK_CUDA_KERNEL_ERRORS(cudaMemcpy(smiles_index_out_dev,
-                                          smiles_index_out.data(),
-                                          smiles_index_out.size() * sizeof(index_type),
-                                          cudaMemcpyHostToDevice));
+      CHECK_HIP_KERNEL_ERRORS(hipMemcpy(smiles_dev,
+                                        smiles_host.data(),
+                                        (smiles_len.back() + smiles_index.back()) * sizeof(smiles_type),
+                                        hipMemcpyHostToDevice));
+      CHECK_HIP_KERNEL_ERRORS(hipMemcpy(smiles_len_dev,
+                                        smiles_len.data(),
+                                        smiles_len.size() * sizeof(index_type),
+                                        hipMemcpyHostToDevice));
+      CHECK_HIP_KERNEL_ERRORS(hipMemcpy(smiles_index_dev,
+                                        smiles_index.data(),
+                                        smiles_index.size() * sizeof(index_type),
+                                        hipMemcpyHostToDevice));
+      CHECK_HIP_KERNEL_ERRORS(hipMemcpy(smiles_index_out_dev,
+                                        smiles_index_out.data(),
+                                        smiles_index_out.size() * sizeof(index_type),
+                                        hipMemcpyHostToDevice));
 
       const dim3 block_dimension{BLOCK_SIZE};
       const dim3 grid_dimension{GRID_SIZE};
@@ -241,16 +246,15 @@ namespace smiles {
     }
 
     void smiles_compressor::copy_out(std::ofstream& out_s) {
-      CHECK_CUDA_ERRORS();
-      CHECK_CUDA_KERNEL_ERRORS(cudaDeviceSynchronize());
+      CHECK_HIP_ERRORS();
+      CHECK_HIP_KERNEL_ERRORS(hipDeviceSynchronize());
 
-      // The copy back is SYNC
-      smiles_output_host.clear();
+      // The copy back is SYNC     smiles_output_host.clear();
       smiles_output_host.resize((temp_index_out.back() + temp_len.back() * 2 + 1));
-      CHECK_CUDA_KERNEL_ERRORS(cudaMemcpy((void*) smiles_output_host.data(),
-                                          smiles_output_dev,
-                                          smiles_output_host.size() * sizeof(smiles_type),
-                                          cudaMemcpyDeviceToHost));
+      CHECK_HIP_KERNEL_ERRORS(hipMemcpy((void*) smiles_output_host.data(),
+                                        smiles_output_dev,
+                                        smiles_output_host.size() * sizeof(smiles_type),
+                                        hipMemcpyDeviceToHost));
       temp_out.clear();
       temp_out.reserve(temp_len.back() * 2 + 1 + temp_index_out.back());
       // Print output
@@ -267,16 +271,15 @@ namespace smiles {
     }
 
     void smiles_decompressor::copy_out(std::ofstream& out_s) {
-      CHECK_CUDA_ERRORS();
-      CHECK_CUDA_KERNEL_ERRORS(cudaDeviceSynchronize());
+      CHECK_HIP_ERRORS();
+      CHECK_HIP_KERNEL_ERRORS(hipDeviceSynchronize());
 
-      // The copy back is SYNC
-      smiles_output_host.clear();
+      // The copy back is SYNC     smiles_output_host.clear();
       smiles_output_host.resize((temp_index_out.back() + temp_len.back() * LONGEST_PATTERN + 1));
-      CHECK_CUDA_KERNEL_ERRORS(cudaMemcpy((void*) smiles_output_host.data(),
-                                          smiles_output_dev,
-                                          smiles_output_host.size() * sizeof(smiles_type),
-                                          cudaMemcpyDeviceToHost));
+      CHECK_HIP_KERNEL_ERRORS(hipMemcpy((void*) smiles_output_host.data(),
+                                        smiles_output_dev,
+                                        smiles_output_host.size() * sizeof(smiles_type),
+                                        hipMemcpyDeviceToHost));
       // Print output
       temp_out.clear();
       temp_out.reserve((temp_index_out.back() + temp_len.back() * LONGEST_PATTERN + 1));
@@ -316,9 +319,9 @@ namespace smiles {
       const int stride_smile = gridDim.x;
       const int stride       = blockDim.x;
 
-      const base_compressor::index_type* smiles_len_l = smiles_len + blockId;
+      const size_t* smiles_len_l = smiles_len + blockId;
       for (int id = blockId; id < num_smiles; id += stride_smile, smiles_len_l += stride_smile) {
-        const base_compressor::index_type smile_len     = *smiles_len_l;
+        const size_t smile_len                          = *smiles_len_l;
         unsigned long last_index                        = 0;
         const base_compressor::smiles_type* smiles_in_l = smiles_in + smiles_in_index[id];
         base_compressor::smiles_type* smiles_out_l      = smiles_out + smiles_out_index[id];
@@ -329,7 +332,7 @@ namespace smiles {
           const base_compressor::smiles_type smile_c = smiles_in_l[i];
           const int is_escape                        = smile_c == smiles_dictionary_escape_char;
           // Maybe for 206 there is a smarter way to do this
-          const auto is_previous_escape_t = __shfl_up_sync(mask, is_escape, 1);
+          const auto is_previous_escape_t = SHFL_UP(mask, is_escape, 1);
           if (threadId % WARP_SIZE != 0)
             is_previous_escape = is_previous_escape_t;
           const auto find_index = static_cast<unsigned char>(smile_c);
@@ -340,12 +343,12 @@ namespace smiles {
 
           auto index = find_pattern_length;
           for (int offset = 1; offset < warpSize; offset *= 2) {
-            int tmp = __shfl_up_sync(mask, index, offset);
+            int tmp = SHFL_UP(mask, index, offset);
             if (threadIdx.x % warpSize >= offset) {
               index += tmp;
             }
           }
-          index = __shfl_up_sync(mask, index, 1);
+          index = SHFL_UP(mask, index, 1);
           if (threadId % WARP_SIZE == 0)
             index = 0;
           index += last_index;
@@ -363,7 +366,7 @@ namespace smiles {
         assert(last_index < MAX_SMILES_LEN);
         if (threadId % WARP_SIZE == 0)
           smiles_out_l[last_index] = '\0';
-        __syncwarp();
+        SYNC;
       }
     }
 
@@ -371,22 +374,22 @@ namespace smiles {
       if (need_clean_up)
         copy_out(out_s);
       // TODO allocate for the worst case but then pass where the smiles begin to reduce the copied amount of data
-      CHECK_CUDA_KERNEL_ERRORS(cudaMemcpy(smiles_dev,
-                                          smiles_host.data(),
-                                          (smiles_len.back() + smiles_index.back()) * sizeof(smiles_type),
-                                          cudaMemcpyHostToDevice));
-      CHECK_CUDA_KERNEL_ERRORS(cudaMemcpy(smiles_len_dev,
-                                          smiles_len.data(),
-                                          smiles_len.size() * sizeof(index_type),
-                                          cudaMemcpyHostToDevice));
-      CHECK_CUDA_KERNEL_ERRORS(cudaMemcpy(smiles_index_dev,
-                                          smiles_index.data(),
-                                          smiles_index.size() * sizeof(index_type),
-                                          cudaMemcpyHostToDevice));
-      CHECK_CUDA_KERNEL_ERRORS(cudaMemcpy(smiles_index_out_dev,
-                                          smiles_index_out.data(),
-                                          smiles_index_out.size() * sizeof(index_type),
-                                          cudaMemcpyHostToDevice));
+      CHECK_HIP_KERNEL_ERRORS(hipMemcpy(smiles_dev,
+                                        smiles_host.data(),
+                                        (smiles_len.back() + smiles_index.back()) * sizeof(smiles_type),
+                                        hipMemcpyHostToDevice));
+      CHECK_HIP_KERNEL_ERRORS(hipMemcpy(smiles_len_dev,
+                                        smiles_len.data(),
+                                        smiles_len.size() * sizeof(index_type),
+                                        hipMemcpyHostToDevice));
+      CHECK_HIP_KERNEL_ERRORS(hipMemcpy(smiles_index_dev,
+                                        smiles_index.data(),
+                                        smiles_index.size() * sizeof(index_type),
+                                        hipMemcpyHostToDevice));
+      CHECK_HIP_KERNEL_ERRORS(hipMemcpy(smiles_index_out_dev,
+                                        smiles_index_out.data(),
+                                        smiles_index_out.size() * sizeof(index_type),
+                                        hipMemcpyHostToDevice));
 
       const dim3 block_dimension{BLOCK_SIZE};
       const dim3 grid_dimension{GRID_SIZE};
@@ -408,5 +411,5 @@ namespace smiles {
 
       return;
     }
-  } // namespace cuda
+  } // namespace hip
 } // namespace smiles

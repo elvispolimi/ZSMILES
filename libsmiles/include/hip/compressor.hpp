@@ -11,7 +11,7 @@
 #include <gpu/knobs.hpp>
 
 namespace smiles {
-  namespace cuda {
+  namespace hip {
     class base_compressor {
     public:
       using cost_type          = uint_fast16_t;
@@ -62,5 +62,5 @@ namespace smiles {
       void clean_up(std::ofstream& out_s);
       void copy_out(std::ofstream& out_s);
     };
-  } // namespace cuda
+  } // namespace hip
 } // namespace smiles
