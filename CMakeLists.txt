@@ -6,6 +6,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(ENABLE_CUDA "Enable CUDA implementations" OFF)
 option(ENABLE_HIP "Enable HIP implementations" OFF)
+# option(ENABLE_KOKKOS "Enable Kokkos implementations" OFF)
 set(GPU_ARCHITECTURE "none" CACHE STRING "Optimize for the target GPU architecture (none to disable)")
 set_property(CACHE GPU_ARCHITECTURE PROPERTY STRINGS ${gpu_architectures})
 
@@ -28,14 +29,19 @@ if(ENABLE_CUDA)
   endif()
 
   enable_language(CUDA)
-  find_package(CUDAToolkit)
+  find_package(CUDAToolkit REQUIRED)
 endif()
 
 if(ENABLE_HIP)
 # TODO test if this work and if it is needed
   set(CMAKE_CXX_COMPILER hipcc)
-  find_package(hip)
+  # find_package(hip REQUIRED)
 endif()
+
+# if(ENABLE_KOKKOS)
+# # TODO test if this work and if it is needed
+#   find_package(Kokkos REQUIRED)
+# endif()
 
 # define the function to handle the CUDA implementation
 function(add_CUDA_dependency target_name)

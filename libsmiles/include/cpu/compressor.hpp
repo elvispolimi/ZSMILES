@@ -3,6 +3,7 @@
 #include <fstream>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <vector>
 
 namespace smiles {
@@ -22,6 +23,7 @@ namespace smiles {
         min_path_score.reserve(2000);
       }
       void operator()(const std::string_view& plain_description, std::ofstream&);
+      std::string preprocess(const std::string_view& smile);
     };
 
     class smiles_decompressor {

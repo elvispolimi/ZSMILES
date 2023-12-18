@@ -5,11 +5,24 @@
 
 #include <algorithm>
 #include <boost/graph/adjacency_list.hpp>
+#include <cstddef>
 #include <fstream>
 #include <limits>
+#include <string>
+#include <string_view>
+#include <tuple>
+#include <vector>
 
 namespace smiles {
   namespace cpu {
+    template<typename char_type>
+    static inline auto char2int(char_type&& c) {
+      return static_cast<int>(c - char_type{'0'}); // hacky conversion from string to int
+    }
+
+    static inline auto int2char(const int num) {
+      return static_cast<std::string_view::value_type>(num + int{'0'}); // again, hacky conversion
+    }
 
     // we model the problem of SMILES compression as choosing the minimum path between the first character and the
     // last one. The cost of each path is the number of character that we need to produce in the output. We solve
@@ -102,6 +115,164 @@ namespace smiles {
 
       // when we reached this point we have correctly compressed the SMILES, we can return it
       out_s << output_string << std::endl;
+    }
+
+    // we define the FSM states
+    enum class smiles_ring_enumerator_states {
+      in_smiles,
+      in_symbol,
+      in_second_digit_ring,
+    };
+
+    struct interval {
+      size_t begin, end;
+    };
+
+    std::string smiles_compressor::preprocess(const std::string_view& smile) {
+      std::vector<int> ids;
+      std::vector<interval> indexes;
+      auto state            = smiles_ring_enumerator_states::in_smiles;
+      auto decimal_id       = int{0};
+      const auto smile_size = smile.size();
+
+      indexes.emplace_back();
+      indexes.back().begin = 0;
+      bool is_double_digit = false;
+      for (std::size_t i = 0; i < smile_size; i++) {
+        const auto character = smile[i];
+        switch (state) {
+          case smiles_ring_enumerator_states::in_smiles:
+            if (character == '[' || character == '{') {
+              state = smiles_ring_enumerator_states::in_symbol;
+            } else if (std::isdigit(static_cast<unsigned char>(character))) {
+              ids.push_back(char2int(character) + decimal_id);
+              if (is_double_digit)
+                indexes.back().end = i - 2;
+              else
+                indexes.back().end = i - 1;
+              if (indexes.back().begin > indexes.back().end)
+                indexes.back().end = indexes.back().end;
+              indexes.emplace_back();
+              indexes.back().begin = i + 1;
+              decimal_id           = int{0};
+              is_double_digit      = false;
+            } else if (character == '%') {
+              state = smiles_ring_enumerator_states::in_second_digit_ring;
+            }
+            break;
+
+          case smiles_ring_enumerator_states::in_symbol:
+            if (character == ']' || character == '}') {
+              state = smiles_ring_enumerator_states::in_smiles;
+            } else if (character == '[' || character == '{') {
+              throw std::runtime_error("Nested symbols in SMILES \"" + std::string{smile} + "\"");
+            }
+            break;
+
+          case smiles_ring_enumerator_states::in_second_digit_ring:
+            if (std::isdigit(static_cast<unsigned char>(character))) {
+              decimal_id      = char2int(character) * int{10};
+              is_double_digit = true;
+              state           = smiles_ring_enumerator_states::in_smiles;
+            } else {
+              throw std::runtime_error("Spurious % in SMILES \"" + std::string{smile} + "\"");
+            }
+            break;
+
+          default:
+            throw std::runtime_error("Unknow state while parsing SMILES \"" + std::string{smile} + "\"");
+        }
+      }
+      indexes.back().end = smile_size - 1;
+
+      std::vector<int> out_ids;
+      const auto num_ids = ids.size();
+      out_ids.resize(ids.size());
+      std::fill(out_ids.begin(), out_ids.end(), -1);
+      // for (size_t dd = 1; dd <= num_ids; dd++) {
+      //   for (size_t i = 0; (i + dd) < num_ids; i++) {
+      //     if (ids[i] == ids[i + dd]) {
+      //       const auto min_id = *std::max_element(out_ids.begin() + i, out_ids.begin() + i + dd);
+      //       out_ids[i]        = min_id + 1;
+      //       out_ids[i + dd]   = min_id + 1;
+      //     }
+      //   }
+      // }
+      // Size_t here does not work because with -1 can do overflow and we will not capture it
+      for (signed long t = 1; t < num_ids; t++) {
+        for (signed long b = t - 1; b >= 0 && out_ids[t] == -1; b--) {
+          if (out_ids[b] == -1 && ids[t] == ids[b]) {
+            const auto min_id = *std::max_element(out_ids.begin() + b, out_ids.begin() + t);
+            out_ids[b]        = min_id + 1;
+            out_ids[t]        = min_id + 1;
+          }
+        }
+      }
+
+      std::string smile_out;
+      for (auto i = 0; i < indexes.size(); i++) {
+        smile_out.append(smile.begin() + indexes[i].begin, smile.begin() + indexes[i].end + 1);
+        if (i < (indexes.size() - 1)) {
+          smile_out.push_back(int2char(out_ids[i]));
+        }
+      }
+
+      return smile_out;
+      // auto state      = smiles_ring_enumerator_states::in_smiles;
+      // auto decimal_id = int{0};
+      // std::string smile_o;
+      // int actual_depth = initial_depth;
+
+      // // loop over the input SMILES to perform the substitution
+      // for (std::size_t i=start_index; i<smile.size() ; i++) {
+      //   const auto character = smile[i];
+      //   switch (state) {
+      //     case smiles_ring_enumerator_states::in_smiles:
+      //       if (character == '[' || character == '{') {
+      //         state = smiles_ring_enumerator_states::in_symbol;
+      //         smile_o.push_back(character);
+      //       } else if (std::isdigit(static_cast<unsigned char>(character))) {
+      //         const auto find_id = char2int(character) + decimal_id;
+      //         if (find_id == id) {
+      //           return {std::to_string(actual_depth - initial_depth) + smile_o + std::to_string(actual_depth - initial_depth), actual_depth, i};
+      //         } else {
+      //           const auto t = preprocess(smile,find_id,initial_depth+1, i+1);
+      //           actual_depth = std::max(actual_depth, std::get<1>(t));
+      //           smile_o.append(std::get<0>(t));
+      //           i=std::get<2>(t);
+      //         }
+      //         decimal_id = int{0};
+      //       } else if (character == '%') {
+      //         state = smiles_ring_enumerator_states::in_second_digit_ring;
+      //       } else {
+      //         smile_o.push_back(character);
+      //       }
+      //       break;
+
+      //     case smiles_ring_enumerator_states::in_symbol:
+      //       if (character == ']' || character == '}') {
+      //         state = smiles_ring_enumerator_states::in_smiles;
+      //       } else if (character == '[' || character == '{') {
+      //         throw std::runtime_error("Nested symbols in SMILES \"" + std::string{smile} + "\"");
+      //       }
+      //       smile_o.push_back(character);
+      //       break;
+
+      //     case smiles_ring_enumerator_states::in_second_digit_ring:
+      //       if (std::isdigit(static_cast<unsigned char>(character))) {
+      //         decimal_id = char2int(character) * int{10};
+      //         state      = smiles_ring_enumerator_states::in_smiles;
+      //       } else {
+      //         throw std::runtime_error("Spurious % in SMILES \"" + std::string{smile} + "\"");
+      //       }
+      //       break;
+
+      //     default:
+      //       throw std::runtime_error("Unknow state while parsing SMILES \"" + std::string{smile} + "\"");
+      //   }
+      // }
+
+      // return {smile_o, actual_depth, smile.size()};
     }
 
     void smiles_decompressor::operator()(const std::string_view& compressed_description,

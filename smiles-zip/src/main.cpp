@@ -32,6 +32,7 @@ int main(int argc, char* argv[]) {
   app_description.add_options()("input-file,i", po::value<std::string>(&input_file), "Input file");
   app_description.add_options()("output-file,o", po::value<std::string>(&output_file), "Output file");
   app_description.add_options()("compress,c", "Compress the input file");
+  app_description.add_options()("preprocess,pre", "Preprocess the input file");
   app_description.add_options()("verbose,v", "Verbose output and stats");
   app_description.add_options()("cuda", "Enable cuda implementation");
   app_description.add_options()("hip", "Enable hip implementation");
@@ -43,13 +44,16 @@ int main(int argc, char* argv[]) {
            "reads from the standard input."
         << std::endl;
     std::cout << std::endl;
-    std::cout << "USAGE: " << argv[0] << "-i input_file -o output_file -c/-d" << std::endl;
+    std::cout << "USAGE: " << argv[0] << "-i input_file -o output_file (-c|-d) [-v] [--cuda|--hip] [--pre]"
+              << std::endl;
     std::cout << std::endl;
     std::cout << app_description << std::endl;
     std::cout << std::endl;
     return EXIT_SUCCESS;
   }
   po::notify(vm);
+
+  const bool preprocess = vm.count("preprocess");
 
   // Add tier measurement for verbose output
   std::chrono::_V2::system_clock::time_point start_time, end_time;
@@ -62,6 +66,8 @@ int main(int argc, char* argv[]) {
     std::ifstream i_file(input_file);  // Open the file
     std::ofstream o_file(output_file); // Open the file
     if (vm.count("cuda")) {
+      if (preprocess)
+        std::cerr << "WARNING: Preprocess enabled but CUDA version does not support it";
 #ifdef ENABLE_CUDA_IMPLEMENTATION
       // declare the functor that performs the conversion
       smiles::cuda::smiles_compressor compress_cont;
@@ -89,6 +95,7 @@ int main(int argc, char* argv[]) {
       throw std::runtime_error("CUDA implementation required but not available");
 #endif
     } else if (vm.count("hip")) {
+      std::cerr << "WARNING: Preprocess enabled but HIP version does not support it";
 #ifdef ENABLE_HIP_IMPLEMENTATION
       // declare the functor that performs the conversion
       smiles::hip::smiles_compressor compress_cont;
@@ -120,7 +127,12 @@ int main(int argc, char* argv[]) {
 
       std::string line;
       // declare the functor that performs the conversion
-      while (std::getline(i_file, line)) { compress_cont(line, o_file); }
+      while (std::getline(i_file, line)) {
+        if (preprocess) {
+          line   = compress_cont.preprocess(line);
+        }
+        compress_cont(line, o_file);
+      }
     }
 
     i_file.close();
@@ -130,6 +142,7 @@ int main(int argc, char* argv[]) {
     std::ifstream i_file(input_file);  // Open the file
     std::ofstream o_file(output_file); // Open the file
     if (vm.count("cuda")) {
+      std::cerr << "WARNING: Preprocess enabled but CUDA version does not support it";
 #ifdef ENABLE_CUDA_IMPLEMENTATION
       // declare the functor that performs the conversion
       smiles::cuda::smiles_decompressor decompress_cont;
@@ -163,6 +176,7 @@ int main(int argc, char* argv[]) {
       throw std::runtime_error("CUDA implementation required but not available");
 #endif
     } else if (vm.count("hip")) {
+      std::cerr << "WARNING: Preprocess enabled but HIP version does not support it";
 #ifdef ENABLE_HIP_IMPLEMENTATION
       // declare the functor that performs the conversion
       smiles::hip::smiles_decompressor decompress_cont;
@@ -204,12 +218,24 @@ int main(int argc, char* argv[]) {
 
     i_file.close();
     o_file.close();
+  }
+  if (vm.count("preprocess")) {
+    std::ifstream i_file(input_file);  // Open the file
+    std::ofstream o_file(output_file); // Open the file
+    smiles::cpu::smiles_compressor compress_cont;
+
+    std::string line;
+    // declare the functor that performs the conversion
+    while (std::getline(i_file, line)) {
+      o_file << compress_cont.preprocess(line) << std::endl;
+    }
   } else {
-    std::cerr << "Error: You must specify either --compress or --decompress." << std::endl;
+    std::cerr << "Error: You must specify either --compress or --decompress or at least --preprocess."
+              << std::endl;
     return EXIT_FAILURE;
   }
 
-  if (vm.count("verbose")) {
+  if (vm.count("verbose") && (vm.count("compress") || vm.count("decompress"))) {
     end_time = std::chrono::high_resolution_clock::now(); // end timer
     // print time taken and throughput
     auto input_size  = std::filesystem::file_size(input_file);
