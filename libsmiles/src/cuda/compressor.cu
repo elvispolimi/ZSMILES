@@ -39,10 +39,10 @@ namespace smiles {
       CHECK_CUDA_KERNEL_ERRORS(cudaMalloc(&smiles_dev, CHAR_PER_DEVICE / 2 * sizeof(smiles_type)));
       CHECK_CUDA_KERNEL_ERRORS(
           cudaMalloc(&match_matrix_dev,
-                     MAX_SMILES_LEN * GRID_SIZE * LONGEST_PATTERN * sizeof(pattern_index_type)));
+                     MAX_SMILES_LEN * NUM_WORK_GROUP * LONGEST_PATTERN * sizeof(pattern_index_type)));
       CHECK_CUDA_KERNEL_ERRORS(
           cudaMalloc(&dijkstra_matrix_dev,
-                     MAX_SMILES_LEN * GRID_SIZE * LONGEST_PATTERN * sizeof(pattern_index_type)));
+                     MAX_SMILES_LEN * NUM_WORK_GROUP * LONGEST_PATTERN * sizeof(pattern_index_type)));
       CHECK_CUDA_KERNEL_ERRORS(cudaMemcpyToSymbol(dictionary_tree_gpu,
                                                   gpu::build_gpu_smiles_dictionary().data(),
                                                   sizeof(gpu::node) * GPU_DICT_SIZE,
@@ -91,15 +91,19 @@ namespace smiles {
                                  const int num_smiles,
                                  base_compressor::pattern_index_type* __restrict__ match_matrix,
                                  base_compressor::pattern_index_type* __restrict__ dijkstra_matrix) {
-      const int threadId      = threadIdx.x;
-      const int blockId       = blockIdx.x;
-      const int stride_smile  = gridDim.x;
-      const int stride        = blockDim.x;
+      const int threadId     = threadIdx.x % WORK_GROUP_SIZE;
+      const int intraBlockId = threadIdx.x / WORK_GROUP_SIZE;
+      const int blockId      = blockIdx.x * BLOCK_SIZE + intraBlockId;
+      const int stride_smile = gridDim.x * BLOCK_SIZE;
+
+      const int stride        = WORK_GROUP_SIZE;
       const int matrix_offset = MAX_SMILES_LEN * LONGEST_PATTERN * blockId;
 
-      const base_compressor::index_type* smiles_len_l        = smiles_len + blockId;
-      base_compressor::pattern_index_type* match_matrix_l    = match_matrix + matrix_offset;
-      base_compressor::pattern_index_type* dijkstra_matrix_l = dijkstra_matrix + matrix_offset;
+      const int pattern_id = threadId;
+
+      const base_compressor::index_type* smiles_len_l              = smiles_len + blockId;
+      base_compressor::pattern_index_type* match_matrix_l          = match_matrix + matrix_offset;
+      base_compressor::pattern_index_type* const dijkstra_matrix_l = dijkstra_matrix + matrix_offset;
       for (int id = blockId; id < num_smiles; id += stride_smile, smiles_len_l += stride_smile) {
         const base_compressor::index_type smile_len     = *smiles_len_l;
         const base_compressor::smiles_type* smiles_in_l = smiles_in + smiles_in_index[id];
@@ -109,12 +113,13 @@ namespace smiles {
         // for (int i = threadId; i < smile_len; i += stride) smiles_s[i] = smiles_in_l[i];
         const base_compressor::smiles_type* smiles_s = smiles_in_l;
         __syncwarp();
-#pragma unroll 8
-        for (int i = 0; i < LONGEST_PATTERN; i++)
-          for (int j = threadId; j <= smile_len; j += stride) match_matrix_l[LONGEST_PATTERN * j + i] = 0;
+        for (int j = 0; j <= smile_len; j += 1)
+          if (pattern_id < LONGEST_PATTERN)
+            match_matrix_l[MAX_SMILES_LEN * j + pattern_id] = 0;
         __syncwarp();
         // For each position in the input string
 
+        // TODO maybe here you can do the same thing with only threadId%16
         for (int i = threadId; i < smile_len; i += stride) {
           const gpu::node* curr = dictionary_tree_gpu;
           int curr_id           = 0;
@@ -125,63 +130,81 @@ namespace smiles {
               curr    = &dictionary_tree_gpu[next_i + curr_id];
               curr_id = next_i + curr_id;
               if (curr->pattern != 0)
-                match_matrix_l[LONGEST_PATTERN * (i + j + 1) + j] = curr->pattern;
+                match_matrix_l[LONGEST_PATTERN * (i+j+1) + j] = curr->pattern;
             } else {
               curr = nullptr;
             }
           }
         }
-#pragma unroll 8
-        for (int i = 0; i < LONGEST_PATTERN; i++)
-          for (int j = threadId; j <= smile_len; j += stride) {
-            dijkstra_matrix_l[i * MAX_SMILES_LEN + j] =
-                std::numeric_limits<base_compressor::pattern_index_type>().max();
-          }
-        __syncwarp();
-        if (threadId % WARP_SIZE == 0) {
-          dijkstra_matrix_l[smile_len]                      = 0;
-          dijkstra_matrix_l[MAX_SMILES_LEN + smile_len]     = 0;
-          dijkstra_matrix_l[MAX_SMILES_LEN * 2 + smile_len] = 0;
 
-          // Skip the first one which is trivial to select the smallest value
-          for (int l = smile_len; l > 0; l--) {
-            // Save the index of the prev first element of tot_cost into global memory
-            base_compressor::pattern_index_type* costs_index_temp = match_matrix_l + l * LONGEST_PATTERN;
-            base_compressor::cost_type best_costs                 = dijkstra_matrix_l[l] + 2;
-            base_compressor::cost_type best_index                 = 0;
-// Compute the best for the next one
-#pragma unroll 8
-            for (int t = 0; t < LONGEST_PATTERN; t++) {
-              if (*costs_index_temp) {
-                dijkstra_matrix_l[MAX_SMILES_LEN * t + l - (t + 1)] = dijkstra_matrix_l[l] + 1;
-              }
-              costs_index_temp += 1;
-              if (best_costs > dijkstra_matrix_l[MAX_SMILES_LEN * t + l - 1]) {
-                best_index = t;
-                best_costs = dijkstra_matrix_l[MAX_SMILES_LEN * t + l - 1];
-              }
+        for (int j = 0; j <= smile_len; j += 1)
+          if (pattern_id < LONGEST_PATTERN)
+            dijkstra_matrix_l[j * LONGEST_PATTERN + pattern_id] =
+                std::numeric_limits<base_compressor::pattern_index_type>().max();
+
+        __syncwarp();
+
+        base_compressor::pattern_index_type* match_matrix_tmp = match_matrix_l + LONGEST_PATTERN * smile_len;
+        base_compressor::pattern_index_type* costs_matrix_tmp = dijkstra_matrix_l + LONGEST_PATTERN * smile_len;
+
+        costs_matrix_tmp[LONGEST_PATTERN] = 0;
+
+        // Skip the first one which is trivial to select the smallest value
+        for (int l = smile_len; l >= 0; l--,
+                 match_matrix_tmp -= LONGEST_PATTERN,
+                 costs_matrix_tmp -= LONGEST_PATTERN) {
+          // Compute the best for the next one
+          int best_index = 0;
+          base_compressor::pattern_index_type best_cost = pattern_id < LONGEST_PATTERN ? costs_matrix_tmp[pattern_id] : std::numeric_limits<base_compressor::pattern_index_type>().max();
+          printf("New %d and I have %d\n",threadId,best_cost);
+          // Reduce
+          for (int offset = stride/2; offset > 0; offset /= 2) {
+            // Get the value and tid from the higher lane
+            const base_compressor::pattern_index_type next_value =
+                __shfl_down_sync(FULL_MASK, best_cost, offset);
+            const int next_tid = __shfl_down_sync(FULL_MASK, threadId, offset);
+
+            // Update the value and tid if the next value is larger
+            if (best_cost > next_value) {
+              best_cost  = next_value;
+              best_index = next_tid;
             }
-            dijkstra_matrix_l[l - 1]                  = best_costs;
-            dijkstra_matrix_l[MAX_SMILES_LEN + l - 1] = best_index;
-            dijkstra_matrix_l[MAX_SMILES_LEN * 2 + l - 1] =
-                match_matrix_l[best_index + (l + best_index) * LONGEST_PATTERN];
+          }
+          if (threadId % stride == 0) {
+            if (best_index == 0)
+              costs_matrix_tmp[0] = costs_matrix_tmp[LONGEST_PATTERN] + 2;
+            else
+              costs_matrix_tmp[0] = best_cost;
+            costs_matrix_tmp[1] = best_index;
+            costs_matrix_tmp[2] = match_matrix_tmp[best_index];
+            printf("BEST %d and I have %d %d %d \n",threadId,costs_matrix_tmp[0], costs_matrix_tmp[1], costs_matrix_tmp[2]);
+          }
+          __syncwarp();
+          if(pattern_id<LONGEST_PATTERN){
+            // Then update the previous values
+            if (l > 0 && *(match_matrix_tmp + pattern_id))
+              costs_matrix_tmp[-(LONGEST_PATTERN * (pattern_id+1)) + pattern_id] =
+                  costs_matrix_tmp[0] + 1;
           }
         }
+        // TODO add first iteration -> it should be fine with previous loop condition
         __syncwarp();
-        // TODO you can parallelize and then make a reduction performed only by threadID 0
-        if (threadId % WARP_SIZE == 0) {
+        if (threadId % stride == 0) {
           int o = 0;
-          for (int l = 0; l < smile_len; l++) {
-            if (!dijkstra_matrix_l[MAX_SMILES_LEN * 2 + l] && !dijkstra_matrix_l[MAX_SMILES_LEN + l]) {
+          costs_matrix_tmp = dijkstra_matrix_l;
+          for (int l = 0; l < smile_len;
+               l++) {
+            if (!costs_matrix_tmp[0] && !costs_matrix_tmp[1]) {
               smiles_out_l[o] = smiles_dictionary_escape_char;
               o++;
               smiles_out_l[o] = smiles_s[l];
               o++;
+              costs_matrix_tmp += LONGEST_PATTERN;
             } else {
-              smiles_out_l[o] =
-                  static_cast<base_compressor::smiles_type>(dijkstra_matrix_l[MAX_SMILES_LEN * 2 + l]);
+              smiles_out_l[o] = static_cast<base_compressor::smiles_type>(costs_matrix_tmp[2]);
               o++;
-              l += dijkstra_matrix_l[MAX_SMILES_LEN + l];
+              l += costs_matrix_tmp[1];
+              costs_matrix_tmp += LONGEST_PATTERN*(costs_matrix_tmp[1]+1);
             }
           }
           // TODO to verify if it is required to have also the +1 for the terminator
