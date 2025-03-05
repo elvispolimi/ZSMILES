@@ -1,3 +1,4 @@
+### C++ ###
 # Prerequisites
 *.d
 
@@ -30,3 +31,10 @@
 *.exe
 *.out
 *.app
+
+# VSCode files
+.vscode
+.cache
+
+# Build folder
+build*

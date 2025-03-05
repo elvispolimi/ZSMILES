@@ -1,2 +1,3 @@
 # ZSMILES
-Efficient SMILES storage for random acces
+
+Efficient SMILES storage for random access
