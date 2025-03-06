@@ -89,5 +89,10 @@ if(ENABLE_HIP)
   #set_source_files_properties(${hip_source_files} PROPERTIES COMPILE_OPTIONS "--expt-relaxed-constexpr;-arch=compute_${GPU_ARCHITECTURE}")
 endif()
 
+if(ENABLE_LIKWID)
+  target_include_directories(libsmiles PRIVATE ${LIKWID_INCLUDE_DIR})
+  add_definitions(-DLIKWID_PERFMON)
+endif()
+
 # set its name to avoid the double lib
 set_target_properties(libsmiles PROPERTIES PREFIX "" OUTPUT_NAME "libsmiles")

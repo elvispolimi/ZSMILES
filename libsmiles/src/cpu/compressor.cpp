@@ -5,11 +5,11 @@
 #include <limits>
 #include <string>
 #include <string_view>
-#include <tuple>
 #include <vector>
 #include <zsmiles/compression_dictionary.hpp>
 #include <zsmiles/cpu/compressor.hpp>
 #include <zsmiles/cpu/dictionary.hpp>
+#include <zsmiles/likwid_utils.hpp>
 
 namespace smiles {
   namespace cpu {
@@ -26,6 +26,7 @@ namespace smiles {
     // last one. The cost of each path is the number of character that we need to produce in the output. We solve
     // this problem using dijkstra and we use a suppor tree to perform pattern matching.
     void smiles_compressor::operator()(const std::string_view& plain_description, std::ofstream& out_s) {
+      LIKWID_MARKER_START("Compress_CPU");
       using index_type = std::string_view::size_type;
 
       // once in the lifetime of the application build a SMILES dictionary. We use this tree to perform pattern
@@ -109,6 +110,7 @@ namespace smiles {
 
       // when we reached this point we have correctly compressed the SMILES, we can return it
       out_s << output_string << std::endl;
+      LIKWID_MARKER_STOP("Compress_CPU");
     }
 
     // we define the FSM states
@@ -123,6 +125,7 @@ namespace smiles {
     };
 
     std::string smiles_compressor::preprocess(const std::string_view& smile) {
+      LIKWID_MARKER_START("Preprocess");
       std::vector<int> ids;
       std::vector<interval> indexes;
       auto state            = smiles_ring_enumerator_states::in_smiles;
@@ -183,16 +186,6 @@ namespace smiles {
       const auto num_ids = ids.size();
       out_ids.resize(ids.size());
       std::fill(out_ids.begin(), out_ids.end(), -1);
-      // for (size_t dd = 1; dd <= num_ids; dd++) {
-      //   for (size_t i = 0; (i + dd) < num_ids; i++) {
-      //     if (ids[i] == ids[i + dd]) {
-      //       const auto min_id = *std::max_element(out_ids.begin() + i, out_ids.begin() + i + dd);
-      //       out_ids[i]        = min_id + 1;
-      //       out_ids[i + dd]   = min_id + 1;
-      //     }
-      //   }
-      // }
-      // Size_t here does not work because with -1 can do overflow and we will not capture it
       for (signed long t = 1; t < num_ids; t++) {
         for (signed long b = t - 1; b >= 0 && out_ids[t] == -1; b--) {
           if (out_ids[b] == -1 && ids[t] == ids[b]) {
@@ -211,66 +204,13 @@ namespace smiles {
         }
       }
 
+      LIKWID_MARKER_STOP("Preprocess");
       return smile_out;
-      // auto state      = smiles_ring_enumerator_states::in_smiles;
-      // auto decimal_id = int{0};
-      // std::string smile_o;
-      // int actual_depth = initial_depth;
-
-      // // loop over the input SMILES to perform the substitution
-      // for (std::size_t i=start_index; i<smile.size() ; i++) {
-      //   const auto character = smile[i];
-      //   switch (state) {
-      //     case smiles_ring_enumerator_states::in_smiles:
-      //       if (character == '[' || character == '{') {
-      //         state = smiles_ring_enumerator_states::in_symbol;
-      //         smile_o.push_back(character);
-      //       } else if (std::isdigit(static_cast<unsigned char>(character))) {
-      //         const auto find_id = char2int(character) + decimal_id;
-      //         if (find_id == id) {
-      //           return {std::to_string(actual_depth - initial_depth) + smile_o + std::to_string(actual_depth - initial_depth), actual_depth, i};
-      //         } else {
-      //           const auto t = preprocess(smile,find_id,initial_depth+1, i+1);
-      //           actual_depth = std::max(actual_depth, std::get<1>(t));
-      //           smile_o.append(std::get<0>(t));
-      //           i=std::get<2>(t);
-      //         }
-      //         decimal_id = int{0};
-      //       } else if (character == '%') {
-      //         state = smiles_ring_enumerator_states::in_second_digit_ring;
-      //       } else {
-      //         smile_o.push_back(character);
-      //       }
-      //       break;
-
-      //     case smiles_ring_enumerator_states::in_symbol:
-      //       if (character == ']' || character == '}') {
-      //         state = smiles_ring_enumerator_states::in_smiles;
-      //       } else if (character == '[' || character == '{') {
-      //         throw std::runtime_error("Nested symbols in SMILES \"" + std::string{smile} + "\"");
-      //       }
-      //       smile_o.push_back(character);
-      //       break;
-
-      //     case smiles_ring_enumerator_states::in_second_digit_ring:
-      //       if (std::isdigit(static_cast<unsigned char>(character))) {
-      //         decimal_id = char2int(character) * int{10};
-      //         state      = smiles_ring_enumerator_states::in_smiles;
-      //       } else {
-      //         throw std::runtime_error("Spurious % in SMILES \"" + std::string{smile} + "\"");
-      //       }
-      //       break;
-
-      //     default:
-      //       throw std::runtime_error("Unknow state while parsing SMILES \"" + std::string{smile} + "\"");
-      //   }
-      // }
-
-      // return {smile_o, actual_depth, smile.size()};
     }
 
     void smiles_decompressor::operator()(const std::string_view& compressed_description,
                                          std::ofstream& out_s) {
+      LIKWID_MARKER_START("Decompress_CPU");
       // decompressing a SMILES is really just a look up on the SMILES_DICTIONARY. We just need to pay attention
       // when the compressed SMILES has excaped something
       // NOTE: we need to start from a clean string
@@ -291,6 +231,7 @@ namespace smiles {
 
       // construct a view string using the memory owned by our buffer
       out_s << scratchpad << std::endl;
+      LIKWID_MARKER_STOP("Decompress_CPU");
     }
   } // namespace cpu
 } // namespace smiles
