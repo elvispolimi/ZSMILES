@@ -129,7 +129,7 @@ int main(int argc, char* argv[]) {
       // declare the functor that performs the conversion
       while (std::getline(i_file, line)) {
         if (preprocess) {
-          line   = compress_cont.preprocess(line);
+          line = compress_cont.preprocess(line);
         }
         compress_cont(line, o_file);
       }
@@ -218,17 +218,14 @@ int main(int argc, char* argv[]) {
 
     i_file.close();
     o_file.close();
-  }
-  if (vm.count("preprocess")) {
+  } else if (vm.count("preprocess")) {
     std::ifstream i_file(input_file);  // Open the file
     std::ofstream o_file(output_file); // Open the file
     smiles::cpu::smiles_compressor compress_cont;
 
     std::string line;
     // declare the functor that performs the conversion
-    while (std::getline(i_file, line)) {
-      o_file << compress_cont.preprocess(line) << std::endl;
-    }
+    while (std::getline(i_file, line)) { o_file << compress_cont.preprocess(line) << std::endl; }
   } else {
     std::cerr << "Error: You must specify either --compress or --decompress or at least --preprocess."
               << std::endl;
