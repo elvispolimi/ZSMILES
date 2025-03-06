@@ -43,10 +43,11 @@ namespace smiles {
       // starting from the end of the path, we need to fill the support vector with information about the best to
       // reach the end, re-using the optimal path. The past-to-end case shall have zero cost.
       // NOTE: the condition on the for is only to prevent undefiend behaviour with zero-lenght SMILES
-      min_path_index.back()     = std::numeric_limits<std::size_t>::max();
-      min_path_score.back()     = index_type{0};
-      const auto starting_index = std::max(index_type{0}, input_size - index_type{1}); // if size_t is signed
-      for (index_type input_index{starting_index}; input_index < input_size; --input_index) {
+      min_path_index.back() = std::numeric_limits<std::size_t>::max();
+      min_path_score.back() = index_type{0};
+
+      for (index_type input_index_safe{input_size}; input_index_safe > 0; --input_index_safe) {
+        const auto input_index      = std::max(index_type{0}, input_index_safe - index_type{1});
         min_path_score[input_index] = std::numeric_limits<index_type>::max();
 
         // then we find all the possible matches that we can use to encode the string and that we will lower the
@@ -91,11 +92,6 @@ namespace smiles {
         if (min_path_score[input_index] == std::numeric_limits<index_type>::max()) {
           min_path_index[input_index] = std::numeric_limits<std::size_t>::max();
           min_path_score[input_index] = index_type{2} + min_path_score[input_index + 1];
-        }
-
-        // we need to bail out when we completed the input string
-        if (input_index == index_type{0}) {
-          break;
         }
       }
 
