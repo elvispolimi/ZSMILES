@@ -23,3 +23,8 @@ set_target_properties(smiles-zip
 if(ENABLE_CUDA)
   target_link_libraries(smiles-zip PRIVATE CUDA::cudart)
 endif()
+if(ENABLE_LIKWID)
+  #target_include_directories("${CMAKE_PROJECT_NAME}" PRIVATE ${LIKWID_INCLUDE_DIR})
+  #target_link_libraries("${CMAKE_PROJECT_NAME}" likwid::likwid)
+  # add_definitions(-DLIKWID_PERFMON)
+endif()

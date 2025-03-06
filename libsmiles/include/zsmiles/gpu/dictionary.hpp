@@ -1,9 +1,8 @@
 #pragma once
 
-#include "compression_dictionary.hpp"
-#include "gpu/node.hpp"
-
 #include <vector>
+#include <zsmiles/compression_dictionary.hpp>
+#include <zsmiles/gpu/node.hpp>
 
 #define GPU_DICT_SIZE 429
 
@@ -12,13 +11,13 @@ namespace smiles {
     class smiles_dictionary_entry_gpu {
     public:
       std::string::size_type size;
-      char pattern[LONGEST_PATTERN+1];
+      char pattern[LONGEST_PATTERN + 1];
 
       constexpr smiles_dictionary_entry_gpu(std::string::size_type size, const char* pattern)
           : size(size), pattern() {
         strcpy(this->pattern, pattern);
       };
-      constexpr smiles_dictionary_entry_gpu(): size(0), pattern(){};
+      constexpr smiles_dictionary_entry_gpu(): size(0), pattern() {};
     };
 
     constexpr std::array<smiles_dictionary_entry_gpu, DICT_SIZE> build_gpu_smiles_dictionary_entries() {

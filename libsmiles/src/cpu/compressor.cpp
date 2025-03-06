@@ -1,8 +1,3 @@
-#include "cpu/compressor.hpp"
-
-#include "compression_dictionary.hpp"
-#include "cpu/dictionary.hpp"
-
 #include <algorithm>
 #include <boost/graph/adjacency_list.hpp>
 #include <cstddef>
@@ -12,6 +7,9 @@
 #include <string_view>
 #include <tuple>
 #include <vector>
+#include <zsmiles/compression_dictionary.hpp>
+#include <zsmiles/cpu/compressor.hpp>
+#include <zsmiles/cpu/dictionary.hpp>
 
 namespace smiles {
   namespace cpu {

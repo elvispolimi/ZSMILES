@@ -1,23 +1,14 @@
-#include "compression_dictionary.hpp"
-#include "cuda/compressor.cuh"
-#include "gpu/dictionary.hpp"
-#include "cuda/nvidia_helper.cuh"
-#include "utils.hpp"
-
-#include <algorithm>
 #include <cassert>
-#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <cuda_runtime.h>
 #include <fstream>
-#include <iostream>
-#include <limits>
 #include <pthread.h>
-#include <string>
-#include <string_view>
-#include <vector>
-
+#include <zsmiles/compression_dictionary.hpp>
+#include <zsmiles/cuda/compressor.cuh>
+#include <zsmiles/cuda/nvidia_helper.cuh>
+#include <zsmiles/gpu/dictionary.hpp>
+#include <zsmiles/utils.hpp>
 namespace smiles {
   namespace cuda {
     const __device__ __constant__ gpu::node dictionary_tree_gpu[GPU_DICT_SIZE];
@@ -49,7 +40,7 @@ namespace smiles {
           cudaMalloc(&dijkstra_matrix_dev,
                      MAX_SMILES_LEN * GRID_SIZE * LONGEST_PATTERN * sizeof(pattern_index_type)));
       CHECK_CUDA_KERNEL_ERRORS(cudaMemcpyToSymbol(dictionary_tree_gpu,
-                                                 gpu:: build_gpu_smiles_dictionary().data(),
+                                                  gpu::build_gpu_smiles_dictionary().data(),
                                                   sizeof(gpu::node) * GPU_DICT_SIZE,
                                                   0,
                                                   cudaMemcpyHostToDevice));
@@ -122,7 +113,7 @@ namespace smiles {
 
         for (int i = threadId; i < smile_len; i += stride) {
           const gpu::node* curr = dictionary_tree_gpu;
-          int curr_id      = 0;
+          int curr_id           = 0;
 #pragma unroll 8
           for (int j = 0; j < LONGEST_PATTERN && curr && j < (smile_len - i); j++) {
             const int next_i = curr->neighbor[smiles_s[i + j] - NOT_PRINTABLE];

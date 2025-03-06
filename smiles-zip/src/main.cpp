@@ -1,7 +1,3 @@
-#include "compression_dictionary.hpp"
-#include "cpu/compressor.hpp"
-#include "cuda/compressor.cuh"
-
 #include <boost/program_options/options_description.hpp>
 #include <boost/program_options/parsers.hpp>
 #include <boost/program_options/variables_map.hpp>
@@ -15,9 +11,13 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <zsmiles/compression_dictionary.hpp>
+#include <zsmiles/cpu/compressor.hpp>
+#include <zsmiles/cuda/compressor.cuh>
+#include <zsmiles/likwid_utils.hpp>
 namespace po = boost::program_options;
 
-#include "compressor_implementations.hpp"
+#include <zsmiles/compressor_implementations.hpp>
 
 #define BUFFER_SIZE 1024 * 16
 
@@ -61,6 +61,7 @@ int main(int argc, char* argv[]) {
     start_time = std::chrono::high_resolution_clock::now(); // start timer
 
   // Check if either compress or decompress is specified
+  LIKWID_MARKER_INIT;
   if (vm.count("compress")) {
     // Open files for input and output
     std::ifstream i_file(input_file);  // Open the file
@@ -231,6 +232,7 @@ int main(int argc, char* argv[]) {
               << std::endl;
     return EXIT_FAILURE;
   }
+  LIKWID_MARKER_CLOSE;
 
   if (vm.count("verbose") && (vm.count("compress") || vm.count("decompress"))) {
     end_time = std::chrono::high_resolution_clock::now(); // end timer

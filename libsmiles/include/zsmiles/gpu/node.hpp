@@ -1,10 +1,8 @@
 #pragma once
 
-#include "compression_dictionary.hpp"
-#include "utils.hpp"
-
-#include <cstdint>
 #include <cstring>
+#include <zsmiles/compression_dictionary.hpp>
+#include <zsmiles/utils.hpp>
 
 namespace smiles {
   namespace gpu {

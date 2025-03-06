@@ -1,6 +1,6 @@
 #pragma once
 
-#include "dictionary_graph.hpp"
+#include <zsmiles/dictionary_graph.hpp>
 
 namespace smiles {
   namespace cpu {

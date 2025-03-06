@@ -1,4 +1,4 @@
-#include <cpu/dictionary.hpp>
+#include <zsmiles/cpu/dictionary.hpp>
 
 namespace smiles {
   namespace cpu {

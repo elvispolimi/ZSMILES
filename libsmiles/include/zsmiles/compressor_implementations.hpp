@@ -5,10 +5,10 @@
 // - 1 external ring lower ID
 #define PREPROCESS_ORDER 0
 
-#include <cpu/compressor.hpp>
+#include <zsmiles/cpu/compressor.hpp>
 #ifdef ENABLE_CUDA_IMPLEMENTATION
-  #include <cuda/compressor.cuh>
+  #include <zsmiles/cuda/compressor.cuh>
 #endif
 #ifdef ENABLE_HIP_IMPLEMENTATION
-  #include <hip/compressor.hpp>
+  #include <zsmiels/hip/compressor.hpp>
 #endif

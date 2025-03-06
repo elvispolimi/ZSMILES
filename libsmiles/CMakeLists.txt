@@ -2,12 +2,13 @@
 # ### Define the source files that compose the library
 # ########################################################################
 set(header_path "${CMAKE_CURRENT_SOURCE_DIR}/include")
+set(header_prefix "zsmiles")
 list(APPEND header_files
-  "${header_path}/cpu/compressor.hpp"
-  "${header_path}/cpu/dictionary.hpp"
-  "${header_path}/compressor_implementations.hpp"
-  "${header_path}/dictionary_graph.hpp"
-  "${header_path}/utils.hpp"
+  "${header_path}/${header_prefix}/cpu/compressor.hpp"
+  "${header_path}/${header_prefix}/cpu/dictionary.hpp"
+  "${header_path}/${header_prefix}/compressor_implementations.hpp"
+  "${header_path}/${header_prefix}/dictionary_graph.hpp"
+  "${header_path}/${header_prefix}/utils.hpp"
 )
 
 set(source_path "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -17,14 +18,14 @@ list(APPEND source_files
 )
 
 list(APPEND gpu_header_files
-  "${header_path}/gpu/dictionary.hpp"
-  "${header_path}/gpu/node.hpp"
-  "${header_path}/gpu/knobs.hpp"
+  "${header_path}/${header_prefix}/gpu/dictionary.hpp"
+  "${header_path}/${header_prefix}/gpu/node.hpp"
+  "${header_path}/${header_prefix}/gpu/knobs.hpp"
 )
 
 list(APPEND cuda_header_files
-  "${header_path}/cuda/compressor.cuh"
-  "${header_path}/cuda/nvidia_helper.cuh"
+  "${header_path}/${header_prefix}/cuda/compressor.cuh"
+  "${header_path}/${header_prefix}/cuda/nvidia_helper.cuh"
 )
 
 list(APPEND cuda_source_files
@@ -32,8 +33,8 @@ list(APPEND cuda_source_files
 )
 
 list(APPEND hip_header_files
-  "${header_path}/hip/compressor.hpp"
-  "${header_path}/hip/hip_helper.hpp"
+  "${header_path}/${header_prefix}/hip/compressor.hpp"
+  "${header_path}/${header_prefix}/hip/hip_helper.hpp"
 )
 
 list(APPEND hip_source_files
