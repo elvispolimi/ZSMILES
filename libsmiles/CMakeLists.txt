@@ -63,26 +63,30 @@ add_library(libsmiles STATIC ${source_files} ${header_files})
 add_library(smiles::libsmiles ALIAS libsmiles)
 set_target_properties(libsmiles PROPERTIES PUBLIC_HEADER "${headers}")
 target_include_directories(libsmiles PUBLIC "${header_path}")
-set_target_properties(libsmiles PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_link_libraries(libsmiles PUBLIC ${${Boost_GRAPH_LIBRARY_RELEASE}})
-set_cxx_flags(libsmiles)
+target_link_libraries(libsmiles PUBLIC Boost::graph)
+set_target_properties(libsmiles
+    PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    CXX_EXTENSIONS OFF
+  )
+
 
 if(ENABLE_CUDA)
-  set_cuda_flags(libsmiles)
-  add_CUDA_dependency(libsmiles)
+  set_target_properties(libsmiles
+      PROPERTIES
+      CUDA_STANDARD 17
+      CUDA_STANDARD_REQUIRED ON
+      CUDA_EXTENSIONS OFF
+      CUDA_SEPARABLE_COMPILATION ON
+  )
   target_compile_definitions(libsmiles PUBLIC ENABLE_CUDA_IMPLEMENTATION)
-  target_compile_options(libsmiles PUBLIC $<$<AND:$<CONFIG:DEBUG>,$<COMPILE_LANGUAGE:CUDA>>:-G>)
 endif()
 
 if(ENABLE_HIP)
   target_compile_definitions(libsmiles PUBLIC ENABLE_HIP_IMPLEMENTATION)
-  set_source_files_properties(${hip_source_files} PROPERTIES COMPILE_OPTIONS "--expt-relaxed-constexpr;-arch=compute_${GPU_ARCHITECTURE}")
+  #set_source_files_properties(${hip_source_files} PROPERTIES COMPILE_OPTIONS "--expt-relaxed-constexpr;-arch=compute_${GPU_ARCHITECTURE}")
 endif()
-
-# if(ENABLE_KOKKOS)
-#   target_compile_definitions(libsmiles PUBLIC ENABLE_KOKKOS_IMPLEMENTATION)
-#   target_link_libraries(libsmiles PUBLIC Kokkos::kokkos)
-# endif()
 
 # set its name to avoid the double lib
 set_target_properties(libsmiles PROPERTIES PREFIX "" OUTPUT_NAME "libsmiles")
