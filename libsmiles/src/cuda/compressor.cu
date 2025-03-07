@@ -1,3 +1,5 @@
+#include "likwid-marker.h"
+
 #include <cassert>
 #include <cstdio>
 #include <cstring>
@@ -386,12 +388,14 @@ namespace smiles {
       const dim3 block_dimension{BLOCK_SIZE};
       const dim3 grid_dimension{GRID_SIZE};
       need_clean_up = true;
+      NVMON_MARKER_START("Decompress_CUDA");
       decompress_gpu<<<grid_dimension, block_dimension>>>(smiles_dev,
                                                           smiles_index_dev,
                                                           smiles_index_out_dev,
                                                           smiles_output_dev,
                                                           smiles_len_dev,
                                                           smiles_len.size());
+      NVMON_MARKER_STOP("Decompress_CUDA");
 
       // Clean up
       temp_len       = smiles_len;

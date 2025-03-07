@@ -11,6 +11,7 @@
 #include <zsmiles/gpu/dictionary.hpp>
 #include <zsmiles/hip/compressor.hpp>
 #include <zsmiles/hip/hip_helper.hpp>
+#include <zsmiles/likwid_utils.hpp>
 #include <zsmiles/utils.hpp>
 
 namespace smiles {
@@ -216,6 +217,7 @@ namespace smiles {
       const dim3 block_dimension{BLOCK_SIZE};
       const dim3 grid_dimension{GRID_SIZE};
       need_clean_up = true;
+      GPUMON_MARKER_START("Compress_HIP");
       compress_gpu<<<grid_dimension, block_dimension>>>(smiles_dev,
                                                         smiles_index_dev,
                                                         smiles_index_out_dev,
@@ -224,6 +226,7 @@ namespace smiles {
                                                         smiles_len.size(),
                                                         match_matrix_dev,
                                                         dijkstra_matrix_dev);
+      GPUMON_MARKER_START("Compress_HIP");
       // Clean up
       temp_len       = smiles_len;
       temp_index_out = smiles_index_out;
@@ -384,12 +387,14 @@ namespace smiles {
       const dim3 block_dimension{BLOCK_SIZE};
       const dim3 grid_dimension{GRID_SIZE};
       need_clean_up = true;
+      GPUMON_MARKER_START("Decompress_HIP");
       decompress_gpu<<<grid_dimension, block_dimension>>>(smiles_dev,
                                                           smiles_index_dev,
                                                           smiles_index_out_dev,
                                                           smiles_output_dev,
                                                           smiles_len_dev,
                                                           smiles_len.size());
+      NVMON_MARKER_STOP("Decompress_HIP");
 
       // Clean up
       temp_len       = smiles_len;

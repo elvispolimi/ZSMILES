@@ -8,7 +8,6 @@ option(ENABLE_CUDA "Enable CUDA implementations" OFF)
 option(ENABLE_HIP "Enable HIP implementations" OFF)
 set(GPU_ARCHITECTURE "none" CACHE STRING "Optimize for the target GPU architecture (none to disable)")
 set(CPU_ARCHITECTURE "native" CACHE STRING "Optimize for the target CPU architecture (none to disable)")
-set_property(CACHE GPU_ARCHITECTURE PROPERTY STRINGS ${gpu_architectures})
 
 # build Release version unless the user specify something else
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)

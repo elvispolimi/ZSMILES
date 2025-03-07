@@ -100,6 +100,7 @@ int main(int argc, char* argv[]) {
       if (preprocess)
         std::cerr << "WARNING: Preprocess enabled but HIP version does not support it";
 #ifdef ENABLE_HIP_IMPLEMENTATION
+      GPUMON_MARKER_INIT;
       // declare the functor that performs the conversion
       smiles::hip::smiles_compressor compress_cont;
       std::string line;
@@ -122,6 +123,7 @@ int main(int argc, char* argv[]) {
         compress_cont.smiles_host.append(line);
       }
       compress_cont.clean_up(o_file);
+      GPUMON_MARKER_CLOSE;
 #else
       throw std::runtime_error("HIP implementation required but not available");
 #endif
@@ -185,6 +187,7 @@ int main(int argc, char* argv[]) {
     } else if (vm.count("hip")) {
       std::cerr << "WARNING: Preprocess enabled but HIP version does not support it";
 #ifdef ENABLE_HIP_IMPLEMENTATION
+      GPUMON_MARKER_INIT;
       // declare the functor that performs the conversion
       smiles::hip::smiles_decompressor decompress_cont;
       std::string line;
@@ -213,6 +216,7 @@ int main(int argc, char* argv[]) {
       }
 
       decompress_cont.clean_up(o_file);
+      GPUMON_MARKER_CLOSE;
 #else
       throw std::runtime_error("HIP implementation required but not available");
 #endif
