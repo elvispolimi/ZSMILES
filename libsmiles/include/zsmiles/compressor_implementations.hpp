@@ -10,5 +10,5 @@
   #include <zsmiles/cuda/compressor.cuh>
 #endif
 #ifdef ENABLE_HIP_IMPLEMENTATION
-  #include <zsmiels/hip/compressor.hpp>
+  #include <zsmiles/hip/compressor.hpp>
 #endif
