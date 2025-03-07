@@ -61,7 +61,6 @@ int main(int argc, char* argv[]) {
     start_time = std::chrono::high_resolution_clock::now(); // start timer
 
   // Check if either compress or decompress is specified
-  LIKWID_MARKER_INIT;
   if (vm.count("compress")) {
     // Open files for input and output
     std::ifstream i_file(input_file);  // Open the file
@@ -70,6 +69,7 @@ int main(int argc, char* argv[]) {
       if (preprocess)
         std::cerr << "WARNING: Preprocess enabled but CUDA version does not support it";
 #ifdef ENABLE_CUDA_IMPLEMENTATION
+      NVMON_MARKER_INIT;
       // declare the functor that performs the conversion
       smiles::cuda::smiles_compressor compress_cont;
       std::string line;
@@ -92,11 +92,13 @@ int main(int argc, char* argv[]) {
         compress_cont.smiles_host.append(line);
       }
       compress_cont.clean_up(o_file);
+      NVMON_MARKER_CLOSE;
 #else
       throw std::runtime_error("CUDA implementation required but not available");
 #endif
     } else if (vm.count("hip")) {
-      std::cerr << "WARNING: Preprocess enabled but HIP version does not support it";
+      if (preprocess)
+        std::cerr << "WARNING: Preprocess enabled but HIP version does not support it";
 #ifdef ENABLE_HIP_IMPLEMENTATION
       // declare the functor that performs the conversion
       smiles::hip::smiles_compressor compress_cont;
@@ -124,6 +126,7 @@ int main(int argc, char* argv[]) {
       throw std::runtime_error("HIP implementation required but not available");
 #endif
     } else {
+      LIKWID_MARKER_INIT;
       smiles::cpu::smiles_compressor compress_cont;
 
       std::string line;
@@ -134,6 +137,7 @@ int main(int argc, char* argv[]) {
         }
         compress_cont(line, o_file);
       }
+      LIKWID_MARKER_CLOSE;
     }
 
     i_file.close();
@@ -145,6 +149,7 @@ int main(int argc, char* argv[]) {
     if (vm.count("cuda")) {
       std::cerr << "WARNING: Preprocess enabled but CUDA version does not support it";
 #ifdef ENABLE_CUDA_IMPLEMENTATION
+      NVMON_MARKER_INIT;
       // declare the functor that performs the conversion
       smiles::cuda::smiles_decompressor decompress_cont;
       std::string line;
@@ -173,6 +178,7 @@ int main(int argc, char* argv[]) {
       }
 
       decompress_cont.clean_up(o_file);
+      NVMON_MARKER_CLOSE;
 #else
       throw std::runtime_error("CUDA implementation required but not available");
 #endif
@@ -211,15 +217,18 @@ int main(int argc, char* argv[]) {
       throw std::runtime_error("HIP implementation required but not available");
 #endif
     } else {
+      LIKWID_MARKER_INIT;
       std::string line;
       smiles::cpu::smiles_decompressor decompress_cont;
 
       while (std::getline(i_file, line)) { decompress_cont(line, o_file); }
+      LIKWID_MARKER_CLOSE;
     }
 
     i_file.close();
     o_file.close();
   } else if (vm.count("preprocess")) {
+    LIKWID_MARKER_INIT;
     std::ifstream i_file(input_file);  // Open the file
     std::ofstream o_file(output_file); // Open the file
     smiles::cpu::smiles_compressor compress_cont;
@@ -227,12 +236,12 @@ int main(int argc, char* argv[]) {
     std::string line;
     // declare the functor that performs the conversion
     while (std::getline(i_file, line)) { o_file << compress_cont.preprocess(line) << std::endl; }
+    LIKWID_MARKER_CLOSE;
   } else {
     std::cerr << "Error: You must specify either --compress or --decompress or at least --preprocess."
               << std::endl;
     return EXIT_FAILURE;
   }
-  LIKWID_MARKER_CLOSE;
 
   if (vm.count("verbose") && (vm.count("compress") || vm.count("decompress"))) {
     end_time = std::chrono::high_resolution_clock::now(); // end timer

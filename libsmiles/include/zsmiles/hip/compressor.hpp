@@ -1,14 +1,11 @@
 #pragma once
 
-#include "gpu/dictionary.hpp"
-#include "gpu/node.hpp"
-
 #include <cstdint>
 #include <string>
-#include <string_view>
 #include <vector>
-
-#include <gpu/knobs.hpp>
+#include <zsmiles/gpu/dictionary.hpp>
+#include <zsmiles/gpu/knobs.hpp>
+#include <zsmiles/gpu/node.hpp>
 
 namespace smiles {
   namespace hip {

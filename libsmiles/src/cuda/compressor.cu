@@ -8,7 +8,9 @@
 #include <zsmiles/cuda/compressor.cuh>
 #include <zsmiles/cuda/nvidia_helper.cuh>
 #include <zsmiles/gpu/dictionary.hpp>
+#include <zsmiles/likwid_utils.hpp>
 #include <zsmiles/utils.hpp>
+
 namespace smiles {
   namespace cuda {
     const __device__ __constant__ gpu::node dictionary_tree_gpu[GPU_DICT_SIZE];
@@ -212,6 +214,7 @@ namespace smiles {
       const dim3 block_dimension{BLOCK_SIZE};
       const dim3 grid_dimension{GRID_SIZE};
       need_clean_up = true;
+      NVMON_MARKER_START("Compress_CUDA");
       compress_gpu<<<grid_dimension, block_dimension>>>(smiles_dev,
                                                         smiles_index_dev,
                                                         smiles_index_out_dev,
@@ -220,6 +223,7 @@ namespace smiles {
                                                         smiles_len.size(),
                                                         match_matrix_dev,
                                                         dijkstra_matrix_dev);
+      NVMON_MARKER_STOP("Compress_CUDA");
       // Clean up
       temp_len       = smiles_len;
       temp_index_out = smiles_index_out;

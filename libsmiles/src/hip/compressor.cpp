@@ -1,27 +1,17 @@
-#include "hip/compressor.hpp"
-
-#include "compression_dictionary.hpp"
-#include "gpu/dictionary.hpp"
-#include "hip/hip_helper.hpp"
-
-#include "utils.hpp"
-
-#include <algorithm>
 #include <cassert>
 #include <cstddef>
-#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <hip/hip_runtime.h>
 #include <hip/hip_runtime_api.h>
-// #include <hip/nvidia_detail/nvidia_hip_runtime_api.h>
-#include <iostream>
-#include <limits>
 #include <pthread.h>
 #include <string>
-#include <string_view>
-#include <vector>
+#include <zsmiles/compression_dictionary.hpp>
+#include <zsmiles/gpu/dictionary.hpp>
+#include <zsmiles/hip/compressor.hpp>
+#include <zsmiles/hip/hip_helper.hpp>
+#include <zsmiles/utils.hpp>
 
 namespace smiles {
   namespace hip {

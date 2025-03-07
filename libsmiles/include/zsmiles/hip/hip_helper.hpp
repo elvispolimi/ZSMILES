@@ -28,12 +28,12 @@ inline void gpuAssert(hipError_t code, const char* file, int line, bool abort = 
     {}
 #endif
 
-#ifdef __HIP_PLATFORM_NVCC__
-#define SYNC  __syncwarp()
-#define SHFL_UP(mask,value,offset) __shfl_up_sync(mask,value,offset)
-#define SHFL(mask,value,offset) __shfl_sync(mask,value,offset)
+#ifdef __HIP_PLATFORM_NVIDIA__
+  #define SYNC                         __syncwarp()
+  #define SHFL_UP(mask, value, offset) __shfl_up_sync(mask, value, offset)
+  #define SHFL(mask, value, offset)    __shfl_sync(mask, value, offset)
 #else
-#define SYNC _syncthreads()
-#define SHFL_UP(mask,value,offset) __shfl_up(mask,value,offset)
-#define SHFL(mask,value,offset) __shfl(mask,value,offset)
+  #define SYNC                         _syncthreads()
+  #define SHFL_UP(mask, value, offset) __shfl_up(mask, value, offset)
+  #define SHFL(mask, value, offset)    __shfl(mask, value, offset)
 #endif
