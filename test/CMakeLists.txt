@@ -34,14 +34,14 @@ if(ENABLE_CUDA)
 endif()
 
 if(ENABLE_HIP)
-  add_test(NAME cuda-test-compress
+  add_test(NAME hip-test-compress
     COMMAND ${Python_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests.py
     --test_data ${TEST_DATA}
     --executable ${SMILES_EXECUTABLE}
     --compress
     --hip
   )
-  add_test(NAME cuda-test-decompress
+  add_test(NAME hip-test-decompress
     COMMAND ${Python_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests.py
     --test_data ${TEST_DATA}
     --executable ${SMILES_EXECUTABLE}

@@ -20,12 +20,11 @@ set_target_properties(smiles-zip
     CXX_EXTENSIONS OFF
   )
 
-if(ENABLE_CUDA)
-  target_link_libraries(smiles-zip PRIVATE CUDA::cudart)
-endif()
-
 if(ENABLE_LIKWID)
   target_include_directories(smiles-zip PRIVATE ${LIKWID_INCLUDE_DIR})
   target_link_libraries(smiles-zip PRIVATE likwid::likwid)
   add_definitions(-DLIKWID_PERFMON)
+  if(ENABLE_CUDA)
+    add_definitions(-DLIKWID_NVMON)
+  endif()
 endif()

@@ -27,10 +27,6 @@ endif()
 enable_language(CXX)
 
 if(ENABLE_CUDA)
-  # Compile commands for CUDA includes https://discourse.cmake.org/t/cmake-target-include-directories-doesnt-export-to-compile-commands-json-when-using-cuda/10072/9
-  set(CMAKE_CUDA_USE_RESPONSE_FILE_FOR_INCLUDES 0)
-  set(CMAKE_CUDA_USE_RESPONSE_FILE_FOR_LIBRARIES 0)
-  set(CMAKE_CUDA_USE_RESPONSE_FILE_FOR_OBJECTS 0)
   if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
     set(CMAKE_CUDA_ARCHITECTURES "${GPU_ARCHITECTURE}")
   endif()
@@ -45,8 +41,15 @@ endif()
 
 if(ENABLE_HIP)
   # TODO test if this work and if it is needed
-  set(CMAKE_CXX_COMPILER hipcc)
-  # find_package(hip REQUIRED)
+  find_package(HIP REQUIRED)
+  enable_language(HIP)
+
+  # Set HIP target architectures for both AMD and NVIDIA
+  if(HIP_PLATFORM STREQUAL "amd")
+    set(CMAKE_HIP_ARCHITECTURES "gfx906;gfx908;gfx90a")  # Adjust for your AMD GPU
+  elseif(HIP_PLATFORM STREQUAL "nvidia")
+    set(CMAKE_HIP_ARCHITECTURES "70;75;80")  # Adjust for your NVIDIA GPU
+  endif()
 endif()
 
 # ########################################################################
@@ -61,6 +64,18 @@ option(ENABLE_TEST "Enable the smiles tests" OFF)
 # ########################################################################
 # find the external packages
 find_package(Boost REQUIRED COMPONENTS graph program_options)
+
+# ########################################################################
+# ### Profiling
+# ########################################################################
+option(ENABLE_LIKWID "Enable profiling using likwid" OFF)
+if(ENABLE_LIKWID)
+  find_package(likwid REQUIRED)
+endif()
+
+# ########################################################################
+# ### Add source files
+# ########################################################################
 add_subdirectory(libsmiles)
 add_subdirectory(smiles-zip)
 
@@ -69,14 +84,6 @@ if(ENABLE_TEST)
   find_package(Python COMPONENTS Interpreter REQUIRED)
   set(TEST_DATA "${CMAKE_CURRENT_LIST_DIR}/data")
   add_subdirectory(test) # end-to-end test
-endif()
-
-# ########################################################################
-# ### Profiling
-# ########################################################################
-option(ENABLE_LIKWID "Enable profiling using likwid" OFF)
-if(ENABLE_LIKWID)
-  find_package(likwid REQUIRED)
 endif()
 
 # ########################################################################
@@ -97,4 +104,5 @@ endif()
 message(STATUS "Target CPU architecture.............: ${CPU_ARCHITECTURE} (CPU_ARCHITECTURE)")
 message(STATUS "Enable TEST.........................: ${ENABLE_TEST} (ENABLE_TEST)")
 message(STATUS "Enable LIKWID.......................: ${ENABLE_LIKWID} (ENABLE_LIKWID)")
+
 
