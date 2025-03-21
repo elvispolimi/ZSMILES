@@ -14,6 +14,7 @@
 #include <zsmiles/compression_dictionary.hpp>
 #include <zsmiles/cpu/compressor.hpp>
 #include <zsmiles/cuda/compressor.cuh>
+//#include <zsmiles/kokkos/compressor.hpp>
 #include <zsmiles/likwid_utils.hpp>
 namespace po = boost::program_options;
 
@@ -36,6 +37,7 @@ int main(int argc, char* argv[]) {
   app_description.add_options()("verbose,v", "Verbose output and stats");
   app_description.add_options()("cuda", "Enable cuda implementation");
   app_description.add_options()("hip", "Enable hip implementation");
+  app_description.add_options()("kokkos", "Enable kokkos implementation");
   app_description.add_options()("decompress,d", "Decompress the input file");
   po::store(po::command_line_parser(argc, argv).options(app_description).run(), vm);
   if (vm.count("help") > 0) {
@@ -126,6 +128,38 @@ int main(int argc, char* argv[]) {
       GPUMON_MARKER_CLOSE;
 #else
       throw std::runtime_error("HIP implementation required but not available");
+#endif
+  } else if (vm.count("kokkos")) {
+  if (preprocess)
+    std::cerr << "WARNING: Preprocess enabled but Kokkos version does not support it" << std::endl;
+#ifdef ENABLE_KOKKOS_IMPLEMENTATION
+  // Supponiamo l'esistenza di marker analoghi per Kokkos, altrimenti ometti
+  // KOKKOS_MARKER_INIT;
+  smiles::kokkos::smiles_compressor compress_cont;
+  std::string line;
+  while (std::getline(i_file, line)) {
+    auto prev_end = compress_cont.smiles_index_out.empty()
+                        ? 0
+                        : compress_cont.smiles_index_out.back() +
+                              (compress_cont.smiles_len.back()) * 2 + 1;
+    if ((!compress_cont.smiles_index.empty() &&
+         (prev_end + line.size() * 2 + 1) >= CHAR_PER_DEVICE) ||
+        compress_cont.smiles_len.size() >= SMILES_PER_DEVICE) {
+      compress_cont.compress(o_file);
+    }
+    assert(line.size() < MAX_SMILES_LEN);
+    prev_end = compress_cont.smiles_index_out.empty()
+                   ? 0
+                   : compress_cont.smiles_index_out.back() +
+                         (compress_cont.smiles_len.back()) * 2 + 1;
+    compress_cont.smiles_index.push_back(compress_cont.smiles_host.size());
+    compress_cont.smiles_index_out.push_back(prev_end);
+    compress_cont.smiles_len.push_back(line.size());
+    compress_cont.smiles_host.append(line);
+  }
+  // KOKKOS_MARKER_CLOSE;
+#else
+  throw std::runtime_error("Kokkos implementation required but not available");
 #endif
     } else {
       LIKWID_MARKER_INIT;
@@ -219,6 +253,35 @@ int main(int argc, char* argv[]) {
       GPUMON_MARKER_CLOSE;
 #else
       throw std::runtime_error("HIP implementation required but not available");
+#endif
+  } else if (vm.count("kokkos")) {
+  std::cerr << "WARNING: Preprocess enabled but Kokkos version does not support it" << std::endl;
+#ifdef ENABLE_KOKKOS_IMPLEMENTATION
+  // Supponiamo l'esistenza di un decompressor Kokkos analogo a quelli CUDA/ HIP
+  // eventualmente, marker specifici per Kokkos possono essere aggiunti
+  smiles::kokkos::smiles_decompressor decompress_cont;
+  std::string line;
+  while (std::getline(i_file, line)) {
+    auto prev_end = decompress_cont.smiles_index_out.empty()
+                        ? 0
+                        : decompress_cont.smiles_index_out.back() +
+                              (decompress_cont.smiles_len.back()) * LONGEST_PATTERN + 1;
+    if ((!decompress_cont.smiles_index.empty() &&
+         (prev_end + line.size() * LONGEST_PATTERN + 1) >= CHAR_PER_DEVICE) ||
+        decompress_cont.smiles_len.size() >= SMILES_PER_DEVICE) {
+      decompress_cont.decompress(o_file);
+    }
+    prev_end = decompress_cont.smiles_index_out.empty()
+                   ? 0
+                   : decompress_cont.smiles_index_out.back() +
+                         (decompress_cont.smiles_len.back()) * LONGEST_PATTERN + 1;
+    decompress_cont.smiles_index.push_back(decompress_cont.smiles_host.size());
+    decompress_cont.smiles_index_out.push_back(prev_end);
+    decompress_cont.smiles_len.push_back(line.size());
+    decompress_cont.smiles_host.append(line);
+  }
+#else
+  throw std::runtime_error("Kokkos implementation required but not available");
 #endif
     } else {
       LIKWID_MARKER_INIT;

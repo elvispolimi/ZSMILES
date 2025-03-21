@@ -25,6 +25,7 @@ endif()
 # we need to enable the language as soon as possible
 enable_language(CXX)
 
+# CUDA CONFIGURATION
 if(ENABLE_CUDA)
   if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
     set(CMAKE_CUDA_ARCHITECTURES "${GPU_ARCHITECTURE}")
@@ -38,6 +39,7 @@ if(ENABLE_CUDA)
   find_package(CUDAToolkit REQUIRED)
 endif()
 
+# HIP CONFIGURATION
 if(ENABLE_HIP)
   # TODO test if this work and if it is needed
   find_package(HIP REQUIRED)
@@ -50,6 +52,23 @@ if(ENABLE_HIP)
     set(CMAKE_HIP_ARCHITECTURES "70;75;80")  # Adjust for your NVIDIA GPU
   endif()
 endif()
+
+
+# KOKKOS CONFIGURATION
+if(ENABLE_CUDA)
+  set(Kokkos_ENABLE_CUDA ON)
+  set(Kokkos_ARCH_AMPERE80 ON)  # A100 uses SM 8.0 (Ampere)
+  set(Kokkos_ENABLE_CUDA_LAMBDA ON)
+  set(Kokkos_ENABLE_CUDA_RELOCATABLE_DEVICE_CODE OFF)
+endif()
+
+if(ENABLE_HIP)
+  set(Kokkos_ENABLE_HIP ON)
+endif()
+
+find_package(Kokkos REQUIRED)
+
+
 
 # ########################################################################
 # ### Define the configuration knobs to drive the building process

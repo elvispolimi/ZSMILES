@@ -41,6 +41,15 @@ list(APPEND hip_source_files
   "${source_path}/hip/compressor.cpp"
 )
 
+list(APPEND hip_header_files
+  "${header_path}/${header_prefix}/kokkos/compressor.hpp"
+)
+
+list(APPEND kokkos_source_files
+  "${source_path}/kokkos/compressor.cpp"
+  )
+
+
 if(ENABLE_CUDA OR ENABLE_HIP)
   list(APPEND header_files ${gpu_header_files})
 
@@ -55,6 +64,7 @@ if(ENABLE_CUDA OR ENABLE_HIP)
     list(APPEND header_files ${hip_header_files})
   endif()
 endif()
+
 
 # ########################################################################
 # ### Define how we should compile the library
@@ -99,6 +109,23 @@ if(ENABLE_HIP)
   target_include_directories(libsmiles PRIVATE ${hip_INCLUDE_DIRS})
   # TODO check on AMD
   set_source_files_properties(${hip_source_files} PROPERTIES COMPILE_OPTIONS "--expt-relaxed-constexpr")
+endif()
+
+if(ENABLE_KOKKOS)
+  # Se Kokkos è già installato nel sistema, utilizza find_package
+  find_package(Kokkos REQUIRED)
+
+  target_link_libraries(libsmiles PUBLIC Kokkos::kokkos)
+  target_include_directories(libsmiles PUBLIC ${Kokkos_INCLUDE_DIRS})
+  target_compile_definitions(libsmiles PUBLIC -DENABLE_KOKKOS)
+  # Abilita il backend appropriato in base alle opzioni
+  if(ENABLE_CUDA)
+    target_compile_definitions(libsmiles PUBLIC -DKOKKOS_ENABLE_CUDA)
+  elseif(ENABLE_HIP)
+    target_compile_definitions(libsmiles PUBLIC -DKOKKOS_ENABLE_HIP)
+  elseif(ENABLE_OPENMP)
+    target_compile_definitions(libsmiles PUBLIC -DKOKKOS_ENABLE_OPENMP)
+  endif()
 endif()
 
 if(ENABLE_LIKWID)
