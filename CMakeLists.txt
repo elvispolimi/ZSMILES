@@ -4,6 +4,8 @@ project(smiles-zip VERSION 0.1)
 # export also compile commands to have a better integration with the ide
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Aggiungi questa opzione nel main CMakeLists.txt
+option(ENABLE_KOKKOS_IMPLEMENTATION "Enable Kokkos implementation" OFF)
 option(ENABLE_CUDA "Enable CUDA implementations" OFF)
 option(ENABLE_HIP "Enable HIP implementations" OFF)
 set(GPU_ARCHITECTURE "none" CACHE STRING "Optimize for the target GPU architecture (none to disable)")
@@ -55,18 +57,20 @@ endif()
 
 
 # KOKKOS CONFIGURATION
-if(ENABLE_CUDA)
-  set(Kokkos_ENABLE_CUDA ON)
-  set(Kokkos_ARCH_AMPERE80 ON)  # A100 uses SM 8.0 (Ampere)
-  set(Kokkos_ENABLE_CUDA_LAMBDA ON)
-  set(Kokkos_ENABLE_CUDA_RELOCATABLE_DEVICE_CODE OFF)
+if(ENABLE_KOKKOS_IMPLEMENTATION)
+  find_package(Kokkos 4.2 REQUIRED CONFIG) # Find Kokkos version 4.2 or later
+  if(ENABLE_CUDA)
+    set(Kokkos_ENABLE_CUDA ON)
+    set(Kokkos_ARCH_AMPERE80 ON)  # A100 uses SM 8.0 (Ampere)
+    set(Kokkos_ENABLE_CUDA_LAMBDA ON)
+    set(Kokkos_ENABLE_CUDA_RELOCATABLE_DEVICE_CODE OFF)
+  endif()
+  if(ENABLE_HIP)
+    set(Kokkos_ENABLE_HIP ON)
+  endif()
 endif()
 
-if(ENABLE_HIP)
-  set(Kokkos_ENABLE_HIP ON)
-endif()
 
-find_package(Kokkos REQUIRED)
 
 
 
@@ -116,6 +120,7 @@ message(STATUS "Build type..........................: ${CMAKE_BUILD_TYPE} (CMAKE
 message(STATUS "Install prefix......................: ${CMAKE_INSTALL_PREFIX} (CMAKE_INSTALL_PREFIX)")
 message(STATUS "Enable CUDA.........................: ${ENABLE_CUDA} (ENABLE_CUDA)")
 message(STATUS "Enable HIP..........................: ${ENABLE_HIP} (ENABLE_HIP)")
+message(STATUS "Enable KOKKOS.......................: ${ENABLE_KOKKOS_IMPLEMENTATION} (ENABLE_KOKKOS)")
 if(ENABLE_CUDA OR ENABLE_HIP)
   message(STATUS "Target GPU architecture.............: ${GPU_ARCHITECTURE} (GPU_ARCHITECTURE)")
 endif()

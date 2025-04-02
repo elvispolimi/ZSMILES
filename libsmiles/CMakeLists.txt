@@ -9,6 +9,8 @@ list(APPEND header_files
   "${header_path}/${header_prefix}/compressor_implementations.hpp"
   "${header_path}/${header_prefix}/dictionary_graph.hpp"
   "${header_path}/${header_prefix}/utils.hpp"
+  "${header_path}/${header_prefix}/kokkos/compressor.hpp" 
+  "${header_path}/${header_prefix}/compression_dictionary.hpp"
 )
 
 set(source_path "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -41,15 +43,6 @@ list(APPEND hip_source_files
   "${source_path}/hip/compressor.cpp"
 )
 
-list(APPEND hip_header_files
-  "${header_path}/${header_prefix}/kokkos/compressor.hpp"
-)
-
-list(APPEND kokkos_source_files
-  "${source_path}/kokkos/compressor.cpp"
-  )
-
-
 if(ENABLE_CUDA OR ENABLE_HIP)
   list(APPEND header_files ${gpu_header_files})
 
@@ -65,26 +58,40 @@ if(ENABLE_CUDA OR ENABLE_HIP)
   endif()
 endif()
 
+# Aggiungi sorgenti Kokkos se abilitato
+if(ENABLE_KOKKOS_IMPLEMENTATION)
+    list(APPEND source_files 
+        "${source_path}/kokkos/compressor.cpp" 
+    )
+    message(STATUS "AGGIUNTI FILE KOKKOS: ${source_path}/kokkos/compressor.cpp")
+endif()
 
 # ########################################################################
 # ### Define how we should compile the library
 # ########################################################################
 
-# define the library compilation steps
+# Crea la libreria UNA SOLA VOLTA
 add_library(libsmiles STATIC ${source_files} ${header_files})
 add_library(smiles::libsmiles ALIAS libsmiles)
-set_target_properties(libsmiles PROPERTIES PUBLIC_HEADER "${headers}")
-target_include_directories(libsmiles PUBLIC "${header_path}")
-target_link_libraries(libsmiles PUBLIC Boost::graph)
-set_target_properties(libsmiles
-    PROPERTIES
+
+set_target_properties(libsmiles PROPERTIES 
+    PUBLIC_HEADER "${header_files}"
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED ON
     CXX_EXTENSIONS OFF
-  )
+    PREFIX ""
+    OUTPUT_NAME "libsmiles"
+)
+
+target_include_directories(libsmiles PUBLIC 
+    "${header_path}"
+)
+
+target_link_libraries(libsmiles PUBLIC 
+    Boost::graph
+)
 
 if(ENABLE_CUDA)
-  # Compile commands for CUDA includes https://discourse.cmake.org/t/cmake-target-include-directories-doesnt-export-to-compile-commands-json-when-using-cuda/10072/9
   set(CMAKE_CUDA_USE_RESPONSE_FILE_FOR_INCLUDES 0)
   set(CMAKE_CUDA_USE_RESPONSE_FILE_FOR_LIBRARIES 0)
   set(CMAKE_CUDA_USE_RESPONSE_FILE_FOR_OBJECTS 0)
@@ -103,29 +110,17 @@ if(ENABLE_HIP)
   set(CMAKE_HIP_USE_RESPONSE_FILE_FOR_INCLUDES 0)
   set(CMAKE_HIP_USE_RESPONSE_FILE_FOR_LIBRARIES 0)
   set(CMAKE_HIP_USE_RESPONSE_FILE_FOR_OBJECTS 0)
-  # TODO check on AMD
   set_property(TARGET libsmiles PROPERTY HIP_ARCHITECTURES ${GPU_ARCHITECTURE})
   target_compile_definitions(libsmiles PUBLIC -DENABLE_HIP_IMPLEMENTATION)
   target_include_directories(libsmiles PRIVATE ${hip_INCLUDE_DIRS})
-  # TODO check on AMD
   set_source_files_properties(${hip_source_files} PROPERTIES COMPILE_OPTIONS "--expt-relaxed-constexpr")
 endif()
 
-if(ENABLE_KOKKOS)
-  # Se Kokkos è già installato nel sistema, utilizza find_package
-  find_package(Kokkos REQUIRED)
-
-  target_link_libraries(libsmiles PUBLIC Kokkos::kokkos)
-  target_include_directories(libsmiles PUBLIC ${Kokkos_INCLUDE_DIRS})
-  target_compile_definitions(libsmiles PUBLIC -DENABLE_KOKKOS)
-  # Abilita il backend appropriato in base alle opzioni
-  if(ENABLE_CUDA)
-    target_compile_definitions(libsmiles PUBLIC -DKOKKOS_ENABLE_CUDA)
-  elseif(ENABLE_HIP)
-    target_compile_definitions(libsmiles PUBLIC -DKOKKOS_ENABLE_HIP)
-  elseif(ENABLE_OPENMP)
-    target_compile_definitions(libsmiles PUBLIC -DKOKKOS_ENABLE_OPENMP)
-  endif()
+if(ENABLE_KOKKOS_IMPLEMENTATION)
+    find_package(Kokkos REQUIRED)
+    target_include_directories(libsmiles PUBLIC ${Kokkos_INCLUDE_DIRS})  # Aggiunto
+    target_link_libraries(libsmiles PUBLIC Kokkos::kokkos)
+    target_compile_definitions(libsmiles PUBLIC ENABLE_KOKKOS_IMPLEMENTATION)
 endif()
 
 if(ENABLE_LIKWID)
@@ -143,6 +138,3 @@ if(ENABLE_LIKWID)
     endif()
   endif()
 endif()
-
-# set its name to avoid the double lib
-set_target_properties(libsmiles PROPERTIES PREFIX "" OUTPUT_NAME "libsmiles")
