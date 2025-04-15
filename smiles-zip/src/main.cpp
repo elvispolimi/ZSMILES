@@ -69,7 +69,7 @@ int main(int argc, char* argv[]) {
       if (preprocess)
         std::cerr << "WARNING: Preprocess enabled but CUDA version does not support it";
 #ifdef ENABLE_CUDA_IMPLEMENTATION
-      NVMON_MARKER_INIT;
+      GPUMON_MARKER_INIT;
       // declare the functor that performs the conversion
       smiles::cuda::smiles_compressor compress_cont;
       std::string line;
@@ -92,7 +92,7 @@ int main(int argc, char* argv[]) {
         compress_cont.smiles_host.append(line);
       }
       compress_cont.clean_up(o_file);
-      NVMON_MARKER_CLOSE;
+      GPUMON_MARKER_CLOSE;
 #else
       throw std::runtime_error("CUDA implementation required but not available");
 #endif
@@ -151,7 +151,7 @@ int main(int argc, char* argv[]) {
     if (vm.count("cuda")) {
       std::cerr << "WARNING: Preprocess enabled but CUDA version does not support it";
 #ifdef ENABLE_CUDA_IMPLEMENTATION
-      NVMON_MARKER_INIT;
+      GPUMON_MARKER_INIT;
       // declare the functor that performs the conversion
       smiles::cuda::smiles_decompressor decompress_cont;
       std::string line;
@@ -180,7 +180,7 @@ int main(int argc, char* argv[]) {
       }
 
       decompress_cont.clean_up(o_file);
-      NVMON_MARKER_CLOSE;
+      GPUMON_MARKER_CLOSE;
 #else
       throw std::runtime_error("CUDA implementation required but not available");
 #endif

@@ -1,4 +1,4 @@
-#include "likwid-marker.h"
+#include "zsmiles/gpu/knobs.hpp"
 
 #include <cassert>
 #include <cstdio>
@@ -38,11 +38,14 @@ namespace smiles {
       smiles_output_host.resize(CHAR_PER_DEVICE);
       CHECK_CUDA_KERNEL_ERRORS(cudaMalloc(&smiles_dev, CHAR_PER_DEVICE / 2 * sizeof(smiles_type)));
       CHECK_CUDA_KERNEL_ERRORS(
-          cudaMalloc(&match_matrix_dev,
-                     MAX_SMILES_LEN * GRID_SIZE * LONGEST_PATTERN * sizeof(pattern_index_type)));
+          cudaMalloc(&score_matrix_dev,
+                     MAX_SMILES_LEN * GRID_SIZE * BLOCK_SIZE * sizeof(pattern_index_type)));
       CHECK_CUDA_KERNEL_ERRORS(
-          cudaMalloc(&dijkstra_matrix_dev,
-                     MAX_SMILES_LEN * GRID_SIZE * LONGEST_PATTERN * sizeof(pattern_index_type)));
+          cudaMalloc(&pattern_matrix_dev,
+                     MAX_SMILES_LEN * BLOCK_SIZE * GRID_SIZE * sizeof(pattern_index_type)));
+      CHECK_CUDA_KERNEL_ERRORS(
+          cudaMalloc(&length_matrix_dev,
+                     MAX_SMILES_LEN * BLOCK_SIZE * GRID_SIZE * sizeof(pattern_index_type)));
       CHECK_CUDA_KERNEL_ERRORS(cudaMemcpyToSymbol(dictionary_tree_gpu,
                                                   gpu::build_gpu_smiles_dictionary().data(),
                                                   sizeof(gpu::node) * GPU_DICT_SIZE,
@@ -55,10 +58,12 @@ namespace smiles {
     smiles_compressor::~smiles_compressor() {
       if (smiles_dev != nullptr)
         CHECK_CUDA_KERNEL_ERRORS(cudaFree(smiles_dev));
-      if (match_matrix_dev != nullptr)
-        CHECK_CUDA_KERNEL_ERRORS(cudaFree(match_matrix_dev));
-      if (dijkstra_matrix_dev != nullptr)
-        CHECK_CUDA_KERNEL_ERRORS(cudaFree(dijkstra_matrix_dev));
+      if (score_matrix_dev != nullptr)
+        CHECK_CUDA_KERNEL_ERRORS(cudaFree(score_matrix_dev));
+      if (pattern_matrix_dev != nullptr)
+        CHECK_CUDA_KERNEL_ERRORS(cudaFree(pattern_matrix_dev));
+      if (length_matrix_dev != nullptr)
+        CHECK_CUDA_KERNEL_ERRORS(cudaFree(length_matrix_dev));
       if (smiles_output_dev != nullptr)
         CHECK_CUDA_KERNEL_ERRORS(cudaFree(smiles_output_dev));
     }
@@ -89,106 +94,67 @@ namespace smiles {
                                  base_compressor::smiles_type* __restrict__ smiles_out,
                                  const base_compressor::index_type* __restrict__ smiles_len,
                                  const int num_smiles,
-                                 base_compressor::pattern_index_type* __restrict__ match_matrix,
-                                 base_compressor::pattern_index_type* __restrict__ dijkstra_matrix) {
-      const int threadId      = threadIdx.x;
-      const int blockId       = blockIdx.x;
-      const int stride_smile  = gridDim.x;
-      const int stride        = blockDim.x;
-      const int matrix_offset = MAX_SMILES_LEN * LONGEST_PATTERN * blockId;
+                                 base_compressor::pattern_index_type* __restrict__ pattern_matrix,
+                                 base_compressor::pattern_index_type* __restrict__ length_matrix,
+                                 base_compressor::pattern_index_type* __restrict__ score_matrix) {
+      const auto threadId = threadIdx.x + blockDim.x * blockIdx.x;
 
-      const base_compressor::index_type* smiles_len_l        = smiles_len + blockId;
-      base_compressor::pattern_index_type* match_matrix_l    = match_matrix + matrix_offset;
-      base_compressor::pattern_index_type* dijkstra_matrix_l = dijkstra_matrix + matrix_offset;
-      for (int id = blockId; id < num_smiles; id += stride_smile, smiles_len_l += stride_smile) {
-        const base_compressor::index_type smile_len     = *smiles_len_l;
-        const base_compressor::smiles_type* smiles_in_l = smiles_in + smiles_in_index[id];
-        base_compressor::smiles_type* smiles_out_l      = smiles_out + smiles_out_index[id];
+      const auto stride                                     = gridDim.x * blockDim.x;
+      const int score_stride                                = MAX_SMILES_LEN;
+      base_compressor::pattern_index_type* score_matrix_l   = score_matrix + score_stride * threadId;
+      base_compressor::pattern_index_type* pattern_matrix_l = pattern_matrix + score_stride * threadId;
+      base_compressor::pattern_index_type* length_matrix_l  = length_matrix + score_stride * threadId;
 
-        assert(smile_len < MAX_SMILES_LEN);
-        // for (int i = threadId; i < smile_len; i += stride) smiles_s[i] = smiles_in_l[i];
-        const base_compressor::smiles_type* smiles_s = smiles_in_l;
-        __syncwarp();
-#pragma unroll 8
-        for (int i = 0; i < LONGEST_PATTERN; i++)
-          for (int j = threadId; j <= smile_len; j += stride) match_matrix_l[LONGEST_PATTERN * j + i] = 0;
-        __syncwarp();
-        // For each position in the input string
+      for (auto i = threadId; i < num_smiles; i += stride) {
+        const base_compressor::index_type smile_len = *(smiles_len + i);
+        assert(MAX_SMILES_LEN > smile_len);
+        const base_compressor::smiles_type* smiles_in_l = &smiles_in[smiles_in_index[i]];
+        base_compressor::smiles_type* smiles_out_l      = &smiles_out[smiles_out_index[i]];
 
-        for (int i = threadId; i < smile_len; i += stride) {
-          const gpu::node* curr = dictionary_tree_gpu;
-          int curr_id           = 0;
-#pragma unroll 8
-          for (int j = 0; j < LONGEST_PATTERN && curr && j < (smile_len - i); j++) {
-            const int next_i = curr->neighbor[smiles_s[i + j] - NOT_PRINTABLE];
+        score_matrix_l[smile_len] = 0;
+
+        for (auto index = static_cast<int>(smile_len - 1); index >= 0; index--) {
+          score_matrix_l[index]   = score_matrix_l[index + 1] + 2;
+          pattern_matrix_l[index] = 0;
+          length_matrix_l[index]  = 1;
+          const gpu::node* curr   = dictionary_tree_gpu;
+          int curr_id             = 0;
+          for (int j = 0; j < LONGEST_PATTERN && curr && j < (smile_len - index); j++) {
+            const int next_i = curr->neighbor[smiles_in_l[index + j] - NOT_PRINTABLE];
             if (next_i) {
               curr    = &dictionary_tree_gpu[next_i + curr_id];
               curr_id = next_i + curr_id;
-              if (curr->pattern != 0)
-                match_matrix_l[LONGEST_PATTERN * (i + j + 1) + j] = curr->pattern;
+              if (curr->pattern != 0) {
+                const auto next = index + j + 1;
+                const auto w    = score_matrix_l[next] + 1;
+                if (w < score_matrix_l[index]) {
+                  score_matrix_l[index]   = w;
+                  pattern_matrix_l[index] = curr->pattern;
+                  length_matrix_l[index]  = j + 1;
+                }
+              }
             } else {
               curr = nullptr;
             }
           }
         }
-#pragma unroll 8
-        for (int i = 0; i < LONGEST_PATTERN; i++)
-          for (int j = threadId; j <= smile_len; j += stride) {
-            dijkstra_matrix_l[i * MAX_SMILES_LEN + j] =
-                std::numeric_limits<base_compressor::pattern_index_type>().max();
-          }
-        __syncwarp();
-        if (threadId % WARP_SIZE == 0) {
-          dijkstra_matrix_l[smile_len]                      = 0;
-          dijkstra_matrix_l[MAX_SMILES_LEN + smile_len]     = 0;
-          dijkstra_matrix_l[MAX_SMILES_LEN * 2 + smile_len] = 0;
 
-          // Skip the first one which is trivial to select the smallest value
-          for (int l = smile_len; l > 0; l--) {
-            // Save the index of the prev first element of tot_cost into global memory
-            base_compressor::pattern_index_type* costs_index_temp = match_matrix_l + l * LONGEST_PATTERN;
-            base_compressor::cost_type best_costs                 = dijkstra_matrix_l[l] + 2;
-            base_compressor::cost_type best_index                 = 0;
-// Compute the best for the next one
-#pragma unroll 8
-            for (int t = 0; t < LONGEST_PATTERN; t++) {
-              if (*costs_index_temp) {
-                dijkstra_matrix_l[MAX_SMILES_LEN * t + l - (t + 1)] = dijkstra_matrix_l[l] + 1;
-              }
-              costs_index_temp += 1;
-              if (best_costs > dijkstra_matrix_l[MAX_SMILES_LEN * t + l - 1]) {
-                best_index = t;
-                best_costs = dijkstra_matrix_l[MAX_SMILES_LEN * t + l - 1];
-              }
-            }
-            dijkstra_matrix_l[l - 1]                  = best_costs;
-            dijkstra_matrix_l[MAX_SMILES_LEN + l - 1] = best_index;
-            dijkstra_matrix_l[MAX_SMILES_LEN * 2 + l - 1] =
-                match_matrix_l[best_index + (l + best_index) * LONGEST_PATTERN];
+        int index     = 0;
+        int out_index = 0;
+        while (index < smile_len) {
+          if (pattern_matrix_l[index] != 0) {
+            smiles_out_l[out_index] = pattern_matrix_l[index];
+            ++out_index;
+            index += length_matrix_l[index];
+          } else {
+            smiles_out_l[out_index] = smiles_dictionary_escape_char;
+            ++out_index;
+            smiles_out_l[out_index] = smiles_in_l[index];
+            ++out_index;
+            index += 1;
           }
         }
-        __syncwarp();
-        // TODO you can parallelize and then make a reduction performed only by threadID 0
-        if (threadId % WARP_SIZE == 0) {
-          int o = 0;
-          for (int l = 0; l < smile_len; l++) {
-            if (!dijkstra_matrix_l[MAX_SMILES_LEN * 2 + l] && !dijkstra_matrix_l[MAX_SMILES_LEN + l]) {
-              smiles_out_l[o] = smiles_dictionary_escape_char;
-              o++;
-              smiles_out_l[o] = smiles_s[l];
-              o++;
-            } else {
-              smiles_out_l[o] =
-                  static_cast<base_compressor::smiles_type>(dijkstra_matrix_l[MAX_SMILES_LEN * 2 + l]);
-              o++;
-              l += dijkstra_matrix_l[MAX_SMILES_LEN + l];
-            }
-          }
-          // TODO to verify if it is required to have also the +1 for the terminator
-          assert(o < smile_len * 2 + 1);
-          smiles_out_l[o] = '\0';
-        }
-        __syncwarp();
+        smiles_out_l[out_index] = '\0';
       }
     }
 
@@ -216,16 +182,17 @@ namespace smiles {
       const dim3 block_dimension{BLOCK_SIZE};
       const dim3 grid_dimension{GRID_SIZE};
       need_clean_up = true;
-      NVMON_MARKER_START("Compress_CUDA");
+      GPUMON_MARKER_START("Compress_CUDA");
       compress_gpu<<<grid_dimension, block_dimension>>>(smiles_dev,
                                                         smiles_index_dev,
                                                         smiles_index_out_dev,
                                                         smiles_output_dev,
                                                         smiles_len_dev,
                                                         smiles_len.size(),
-                                                        match_matrix_dev,
-                                                        dijkstra_matrix_dev);
-      NVMON_MARKER_STOP("Compress_CUDA");
+                                                        pattern_matrix_dev,
+                                                        length_matrix_dev,
+                                                        score_matrix_dev);
+      GPUMON_MARKER_STOP("Compress_CUDA");
       // Clean up
       temp_len       = smiles_len;
       temp_index_out = smiles_index_out;
@@ -388,14 +355,14 @@ namespace smiles {
       const dim3 block_dimension{BLOCK_SIZE};
       const dim3 grid_dimension{GRID_SIZE};
       need_clean_up = true;
-      NVMON_MARKER_START("Decompress_CUDA");
+      GPUMON_MARKER_START("Decompress_CUDA");
       decompress_gpu<<<grid_dimension, block_dimension>>>(smiles_dev,
                                                           smiles_index_dev,
                                                           smiles_index_out_dev,
                                                           smiles_output_dev,
                                                           smiles_len_dev,
                                                           smiles_len.size());
-      NVMON_MARKER_STOP("Decompress_CUDA");
+      GPUMON_MARKER_STOP("Decompress_CUDA");
 
       // Clean up
       temp_len       = smiles_len;

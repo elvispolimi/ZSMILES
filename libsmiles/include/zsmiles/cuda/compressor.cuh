@@ -47,8 +47,9 @@ namespace smiles {
       ~smiles_compressor();
 
     private:
-      pattern_index_type* match_matrix_dev;
-      pattern_index_type* dijkstra_matrix_dev;
+      pattern_index_type* pattern_matrix_dev;
+      pattern_index_type* length_matrix_dev;
+      pattern_index_type* score_matrix_dev;
     };
 
     class smiles_decompressor: public base_compressor {
