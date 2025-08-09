@@ -1,12 +1,11 @@
 #ifndef ZSMILES_KOKKOS_COMPRESSOR_HPP
 #define ZSMILES_KOKKOS_COMPRESSOR_HPP
 
-#include <vector>
-#include <string>
+#include <zsmiles/compression_dictionary.hpp>
 #include <fstream>
 
 namespace smiles { 
-    namespace kokkos {  // Sintassi C++11/C++17 corretta
+    namespace kokkos {
 
         class smiles_compressor {
         public:
@@ -16,7 +15,7 @@ namespace smiles {
 
         class smiles_decompressor {
         public:
-            void decompress(std::ifstream&, std::ofstream& o_file);
+            void decompress(std::ifstream& i_file, std::ofstream& o_file);
             void clean_up(std::ofstream& o_file);
         };
 

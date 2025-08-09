@@ -14,7 +14,7 @@
 #include <zsmiles/compression_dictionary.hpp>
 #include <zsmiles/cpu/compressor.hpp>
 #include <zsmiles/cuda/compressor.cuh>
-#include <zsmiles/kokkos/compressor.hpp>
+#include <zsmiles/kokkos/decompressor.hpp>
 #include <zsmiles/likwid_utils.hpp>
 namespace po = boost::program_options;
 
@@ -222,21 +222,41 @@ int main(int argc, char* argv[]) {
 #else
       throw std::runtime_error("HIP implementation required but not available");
 #endif
-    } else if (vm.count("kokkos")) {
-      if (preprocess)
-        std::cerr << "WARNING: Preprocess enabled but Kokkos version does not support it" << std::endl;
-      #ifdef ENABLE_KOKKOS_IMPLEMENTATION
-      LIKWID_MARKER_INIT
-        try {
-          smiles::kokkos::smiles_decompressor decompressor;
-          decompressor.decompress(i_file, o_file);
-        } catch(const std::exception& e) {
-        std::cerr << "Kokkos error: " << e.what() << std::endl;
+} else if (vm.count("kokkos")) {
+  #ifdef ENABLE_KOKKOS_IMPLEMENTATION
+    LIKWID_MARKER_INIT;
+    smiles::kokkos::smiles_decompressor decompress_cont;
+    std::string line;
+  
+    while (std::getline(i_file, line)) {
+      auto prev_end = decompress_cont.smiles_index_out.empty()
+                          ? 0
+                          : decompress_cont.smiles_index_out.back() +
+                                (decompress_cont.smiles_len.back()) * LONGEST_PATTERN + 1;
+  
+      if ((decompress_cont.smiles_index.size() > 0 &&
+           (prev_end + line.size() * LONGEST_PATTERN + 1) >= CHAR_PER_DEVICE) ||
+          decompress_cont.smiles_len.size() >= SMILES_PER_DEVICE) {
+        decompress_cont.decompress(o_file);
       }
-      LIKWID_MARKER_CLOSE;
-      #endif
+  
+      prev_end = decompress_cont.smiles_index_out.empty()
+                     ? 0
+                     : decompress_cont.smiles_index_out.back() +
+                           (decompress_cont.smiles_len.back()) * LONGEST_PATTERN + 1;
+  
+      decompress_cont.smiles_index.push_back(decompress_cont.smiles_host.size());
+      decompress_cont.smiles_index_out.push_back(prev_end);
+      decompress_cont.smiles_len.push_back(line.size());
+      decompress_cont.smiles_host.append(line);
     }
-
+  
+    decompress_cont.clean_up(o_file);
+    LIKWID_MARKER_CLOSE;
+  #else
+    throw std::runtime_error("Kokkos implementation required but not available");
+  #endif
+  }  
     i_file.close();
     o_file.close();
   } else if (vm.count("preprocess")) {
