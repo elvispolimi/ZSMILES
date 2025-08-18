@@ -67,6 +67,10 @@ int main(int argc, char* argv[]) {
     // Open files for input and output
     std::ifstream i_file(input_file);  // Open the file
     std::ofstream o_file(output_file); // Open the file
+    if (vm.count("kokkos")) {
+      smiles::kokkos::smiles_compressor compress_cont;
+      compress_cont.test();
+    }
     if (vm.count("cuda")) {
       if (preprocess)
         std::cerr << "WARNING: Preprocess enabled but CUDA version does not support it";

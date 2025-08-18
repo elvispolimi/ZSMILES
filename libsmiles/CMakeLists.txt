@@ -9,7 +9,8 @@ list(APPEND header_files
   "${header_path}/${header_prefix}/compressor_implementations.hpp"
   "${header_path}/${header_prefix}/dictionary_graph.hpp"
   "${header_path}/${header_prefix}/utils.hpp"
-  "${header_path}/${header_prefix}/kokkos/compressor.hpp" 
+  "${header_path}/${header_prefix}/kokkos/decompressor.hpp" 
+  "${header_path}/${header_prefix}/kokkos/kokkos_smiles_dictionary.hpp"
   "${header_path}/${header_prefix}/compression_dictionary.hpp"
 )
 
@@ -61,9 +62,9 @@ endif()
 # Aggiungi sorgenti Kokkos se abilitato
 if(ENABLE_KOKKOS_IMPLEMENTATION)
     list(APPEND source_files 
-        "${source_path}/kokkos/compressor.cpp" 
+        "${source_path}/kokkos/decompressor.cpp" 
     )
-    message(STATUS "AGGIUNTI FILE KOKKOS: ${source_path}/kokkos/compressor.cpp")
+    message(STATUS "AGGIUNTI FILE KOKKOS: ${source_path}/kokkos/decompressor.cpp")
 endif()
 
 # ########################################################################

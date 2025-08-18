@@ -7,9 +7,9 @@ namespace smiles {
   
   struct Dictionary {
     // numero di entry
-    static constexpr size_t N = host_sizes.size();
+    static constexpr size_t N = 256;
     // totale dei caratteri contenuti in tutti i pattern
-    static constexpr size_t TOTAL_CHARS = host_patterns.size();
+    static constexpr size_t TOTAL_CHARS = 1505;
   
     static constexpr std::array<char, TOTAL_CHARS> host_patterns = {
         'E', 'R', 'R', 'O', 'R',
@@ -120,15 +120,15 @@ namespace smiles {
     };
   
     // Al runtime, usiamo questi View:
-    Kokkos::View<const char*>   patterns;  // size TOTAL_CHARS
-    Kokkos::View<const size_t*> offsets;   // size N
-    Kokkos::View<const size_t*> sizes;     // size N
+    Kokkos::View<char*>   patterns;  // size TOTAL_CHARS
+    Kokkos::View<size_t*> offsets;   // size N
+    Kokkos::View<size_t*> sizes;     // size N
 
     Dictionary() {
       // Allocazione device
-      patterns = Kokkos::View<const char*>("patterns", TOTAL_CHARS);
-      offsets  = Kokkos::View<const size_t*>("offsets",  N);
-      sizes    = Kokkos::View<const size_t*>("sizes",    N);
+      patterns = Kokkos::View<char*>("patterns", TOTAL_CHARS);
+      offsets  = Kokkos::View<size_t*>("offsets",  N);
+      sizes    = Kokkos::View<size_t*>("sizes",    N);
 
       // Copia da host constexpr a device
       auto h_patterns = Kokkos::create_mirror_view(patterns);
@@ -145,15 +145,15 @@ namespace smiles {
       Kokkos::deep_copy(offsets,  h_offsets);
       Kokkos::deep_copy(sizes,    h_sizes);
     }
+
+     KOKKOS_INLINE_FUNCTION
+    size_t offset(size_t entry) const { return offsets(entry); }
+
+    KOKKOS_INLINE_FUNCTION
+    size_t size(size_t entry) const { return sizes(entry); }
+
+    KOKKOS_INLINE_FUNCTION
+    char pattern_at(size_t idx) const { return patterns(idx); }
   };
-
-  KOKKOS_INLINE_FUNCTION
-  size_t offset(size_t entry) const { return offsets(entry); }
-
-  KOKKOS_INLINE_FUNCTION
-  size_t size(size_t entry) const { return sizes(entry); }
-
-  KOKKOS_INLINE_FUNCTION
-  char pattern_at(size_t idx) const { return patterns(idx); }
 
 } // namespace smiles
