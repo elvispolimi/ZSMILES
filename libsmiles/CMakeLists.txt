@@ -122,6 +122,8 @@ if(ENABLE_KOKKOS_IMPLEMENTATION)
     target_include_directories(libsmiles PUBLIC ${Kokkos_INCLUDE_DIRS})  # Aggiunto
     target_link_libraries(libsmiles PUBLIC Kokkos::kokkos)
     target_compile_definitions(libsmiles PUBLIC ENABLE_KOKKOS_IMPLEMENTATION)
+    target_compile_definitions(libsmiles PUBLIC KOKKOS_ENABLE_DEBUG_BOUNDS_CHECK)
+    target_compile_definitions(libsmiles PUBLIC KOKKOS_ENABLE_DEBUG)
 endif()
 
 if(ENABLE_LIKWID)

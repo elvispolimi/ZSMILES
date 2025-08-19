@@ -228,34 +228,74 @@ int main(int argc, char* argv[]) {
 #endif
 } else if (vm.count("kokkos")) {
   #ifdef ENABLE_KOKKOS_IMPLEMENTATION
+
+    /**
+     * L'algoritmo deve sviluppare un buffer di SMILES in una view di Kokkos,
+     * e poi decomprimere i SMILES in un file di output.
+     * Il buffer deve essere gestito in modo da evitare allocazioni/deallocazioni inutili.
+     * Le operazioni di decompressione devono essere eseguite in parallelo su GPU.
+     * Per fare ciò vanno salvati gli indici di inizio e fine di ogni SMILES durante la 
+     * lettura del file di input.
+     * In questo modo, si può evitare di allocare memoria per ogni SMILES
+     * e si può semplicemente scrivere i SMILES decompressi in un file di output.
+     * Ogni SMILES avrà tutto lo spazio necessario per essere decompresso dato che 
+     * il buffer prealloca la dimensione dello smile * LONGEST_PATTERN + 1.
+     */
     LIKWID_MARKER_INIT;
-    smiles::kokkos::smiles_decompressor decompress_cont;
+    Kokkos::initialize();{
+    smiles::kokkos::smiles_decompressor decompress_cont(CHAR_PER_DEVICE, SMILES_PER_DEVICE);
     std::string line;
-  
-    while (std::getline(i_file, line)) {
-      auto prev_end = decompress_cont.smiles_index_out.empty()
-                          ? 0
-                          : decompress_cont.smiles_index_out.back() +
-                                (decompress_cont.smiles_len.back()) * LONGEST_PATTERN + 1;
-  
-      if ((decompress_cont.smiles_index.size() > 0 &&
-           (prev_end + line.size() * LONGEST_PATTERN + 1) >= CHAR_PER_DEVICE) ||
-          decompress_cont.smiles_len.size() >= SMILES_PER_DEVICE) {
-        decompress_cont.decompress(o_file);
-      }
-  
-      prev_end = decompress_cont.smiles_index_out.empty()
-                     ? 0
-                     : decompress_cont.smiles_index_out.back() +
-                           (decompress_cont.smiles_len.back()) * LONGEST_PATTERN + 1;
-  
-      decompress_cont.smiles_index.push_back(decompress_cont.smiles_host.size());
-      decompress_cont.smiles_index_out.push_back(prev_end);
-      decompress_cont.smiles_len.push_back(line.size());
-      decompress_cont.smiles_host.append(line);
+
+while (std::getline(i_file, line)) {
+  std::cout << "[DEBUG] Read line: " << line << std::endl;
+
+  size_t prev_end = decompress_cont.smiles_count == 0 ? 0 :
+      decompress_cont.smiles_index_out(decompress_cont.smiles_count - 1) +
+      decompress_cont.smiles_len(decompress_cont.smiles_count - 1) * LONGEST_PATTERN + 1;
+
+  std::cout << "[DEBUG] Previous end: " << prev_end << std::endl;
+
+  if ((decompress_cont.smiles_count > 0 &&
+       (prev_end + line.size() * LONGEST_PATTERN + 1) >= CHAR_PER_DEVICE) ||
+      decompress_cont.smiles_count >= SMILES_PER_DEVICE) {
+    std::cout << "[DEBUG] Buffer full, decompressing current batch..." << std::endl;
+    decompress_cont.decompress(o_file);
+    decompress_cont.smiles_count = 0;
+    decompress_cont.smiles_host_index = 0;
+  }
+
+  std::cout << "[DEBUG] Adding SMILES to buffer..." << std::endl;
+
+  if (decompress_cont.smiles_count < SMILES_PER_DEVICE &&
+      decompress_cont.smiles_host_index + line.size() <= CHAR_PER_DEVICE) {
+    decompress_cont.smiles_index(decompress_cont.smiles_count) = decompress_cont.smiles_host_index;
+    decompress_cont.smiles_len(decompress_cont.smiles_count) = line.size();
+
+    prev_end = decompress_cont.smiles_count == 0 ? 0 :
+        decompress_cont.smiles_index_out(decompress_cont.smiles_count - 1) +
+        decompress_cont.smiles_len(decompress_cont.smiles_count - 1) * LONGEST_PATTERN + 1;
+
+    decompress_cont.smiles_index_out(decompress_cont.smiles_count) = prev_end;
+
+    for (size_t i = 0; i < line.size(); ++i) {
+      decompress_cont.smiles_host(decompress_cont.smiles_host_index++) = line[i];
     }
-  
-    decompress_cont.clean_up(o_file);
+
+    ++decompress_cont.smiles_count;
+    std::cout << "[DEBUG] Added SMILES #" << decompress_cont.smiles_count
+              << ", length: " << line.size() << std::endl;
+  } else {
+    std::cerr << "[ERROR] Buffer overflow or too many SMILES, skipping line." << std::endl;
+  }
+}
+
+// decompressione finale
+if (decompress_cont.smiles_count > 0) {
+    std::cout << "[DEBUG] Final decompression of remaining SMILES..." << std::endl;
+    decompress_cont.decompress(o_file);
+}
+}
+Kokkos::finalize();
     LIKWID_MARKER_CLOSE;
   #else
     throw std::runtime_error("Kokkos implementation required but not available");

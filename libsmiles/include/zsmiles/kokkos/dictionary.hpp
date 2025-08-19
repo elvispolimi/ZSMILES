@@ -6,6 +6,35 @@
 
 namespace smiles {
   namespace kokkos {
+    struct smiles_dictionary_entry_gpu {
+      std::string::size_type size;
+      char pattern[LONGEST_PATTERN + 1];
+
+      constexpr smiles_dictionary_entry_gpu(std::string::size_type size, const char* pattern)
+          : size(size), pattern() {
+          strcpy(this->pattern, pattern);
+      }
+
+      constexpr smiles_dictionary_entry_gpu() : size(0), pattern() {}
+    };
+
+    Kokkos::View<smiles_dictionary_entry_gpu*> build_gpu_smiles_dictionary_entries() {
+      // Alloca il view device
+      Kokkos::View<smiles_dictionary_entry_gpu*> entries("entries", DICT_SIZE);
+
+      // Crea un mirror sul host
+      auto n = Kokkos::create_mirror_view(entries);
+
+      // Inizializza le entry del dizionario
+      for (int i = 0; i < DICT_SIZE; i++) {
+        n(i) = smiles_dictionary_entry_gpu(SMILES_DICTIONARY[i].size, SMILES_DICTIONARY[i].pattern);
+      }
+
+      // Copia il mirror nel view device
+      Kokkos::deep_copy(entries, n);
+      return entries;
+    }
+
     Kokkos::View<node*> build_gpu_smiles_dictionary() {
     // Alloca il view device
     Kokkos::View<node*> nodes("nodes", GPU_DICT_SIZE);
