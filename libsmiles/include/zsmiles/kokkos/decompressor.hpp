@@ -46,17 +46,41 @@ public:
 
 class smiles_compressor {
 public:
-  std::string smiles_host;
-  std::vector<size_t> smiles_index;
-  std::vector<size_t> smiles_index_out;
-  std::vector<size_t> smiles_len;
+  using smiles_type = char;
+  using index_type  = size_t;
 
-  smiles_compressor();
-  ~smiles_compressor();
+  Kokkos::View<index_type*, Kokkos::CudaUVMSpace> smiles_index_out;
+  Kokkos::View<index_type*, Kokkos::CudaUVMSpace> smiles_len;
+  Kokkos::View<index_type*, Kokkos::CudaUVMSpace> smiles_index;
+  Kokkos::View<smiles_type*, Kokkos::CudaUVMSpace> smiles_host;
+  Kokkos::View<smiles_type*, Kokkos::CudaUVMSpace> smiles_out;
+
+
+
+  // Contatori per simulare push_back/append
+  size_t smiles_count = 0;      // quante SMILES abbiamo aggiunto
+  size_t smiles_host_index  = 0;      // prossimo indice disponibile in smiles_host
+
+  smiles_compressor() :   smiles_index_out("smiles_index_out", SMILES_PER_DEVICE),
+                          smiles_len("smiles_len", SMILES_PER_DEVICE),
+                          smiles_index("smiles_index", SMILES_PER_DEVICE),
+                          smiles_host("smiles_host", CHAR_PER_DEVICE),
+                          smiles_out("smiles_out", CHAR_PER_DEVICE),
+                          pattern_matrix_dev("pattern_matrix_dev", SMILES_PER_DEVICE, 300),
+                          length_matrix_dev("length_matrix_dev", SMILES_PER_DEVICE, 300),
+                          score_matrix_dev("score_matrix_dev", SMILES_PER_DEVICE, 300) {
+    std::cout << "[DEBUG] SMILES compressor initialized with max_chars: " 
+              << CHAR_PER_DEVICE << " and max_smiles: " << SMILES_PER_DEVICE << std::endl;
+  }
 
   void compress(std::ofstream& out_s);
   void clean_up(std::ofstream& out_s);
   void test();
+
+private:
+  Kokkos::View<uint_fast8_t**, Kokkos::CudaUVMSpace> pattern_matrix_dev;
+  Kokkos::View<uint_fast8_t**, Kokkos::CudaUVMSpace> length_matrix_dev;
+  Kokkos::View<uint_fast8_t**, Kokkos::CudaUVMSpace> score_matrix_dev;
 };
 
 } // namespace kokkos

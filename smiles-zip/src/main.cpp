@@ -68,8 +68,45 @@ int main(int argc, char* argv[]) {
     std::ifstream i_file(input_file);  // Open the file
     std::ofstream o_file(output_file); // Open the file
     if (vm.count("kokkos")) {
+      Kokkos::initialize(); {
       smiles::kokkos::smiles_compressor compress_cont;
-      compress_cont.test();
+      std::string line;
+      while (std::getline(i_file, line)) {
+        size_t prev_end = compress_cont.smiles_count == 0 ? 0 :
+            compress_cont.smiles_index_out(compress_cont.smiles_count - 1) +
+            compress_cont.smiles_len(compress_cont.smiles_count - 1) * 2 + 1;
+        if ((compress_cont.smiles_count > 0 &&
+            (prev_end + line.size() * 2 + 1) >= CHAR_PER_DEVICE) ||
+            compress_cont.smiles_count >= 1) {
+          compress_cont.compress(o_file);
+          compress_cont.smiles_count = 0;
+          compress_cont.smiles_host_index = 0;
+        }
+
+        if (line.size() >= MAX_SMILES_LEN) {
+          std::cerr << "[ERROR] SMILES troppo lunga, scartata." << std::endl;
+          continue;
+        }
+
+        // Scrittura indici e lunghezze
+        compress_cont.smiles_index(compress_cont.smiles_count) = compress_cont.smiles_host_index;
+        compress_cont.smiles_len(compress_cont.smiles_count)   = line.size();
+        compress_cont.smiles_index_out(compress_cont.smiles_count) = prev_end;
+        // Copia caratteri nel buffer
+        for (size_t i = 0; i < line.size(); ++i) {
+          compress_cont.smiles_host(compress_cont.smiles_host_index++) = line[i];
+        }
+
+        ++compress_cont.smiles_count;
+      }
+
+  // compressione finale
+  if (compress_cont.smiles_count > 0) {
+    std::cout << "[DEBUG] Compressione finale..." << std::endl;
+    compress_cont.clean_up(o_file);
+  }
+}
+Kokkos::finalize();
     }
     if (vm.count("cuda")) {
       if (preprocess)

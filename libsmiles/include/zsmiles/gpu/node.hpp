@@ -8,7 +8,7 @@ namespace smiles {
   namespace gpu {
     class node {
     public:
-      using node_letter   = char;
+      using node_letter   = unsigned char;
       using node_neighbor = unsigned short;
 
       node_letter pattern = 0;

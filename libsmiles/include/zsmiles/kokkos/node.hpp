@@ -17,7 +17,7 @@ namespace smiles {
       KOKKOS_INLINE_FUNCTION
       node() : pattern(0), letter(' ') {
         for (int i = 0; i < PRINTABLE_CHAR; i++) {
-          neighbor[i] = -1;   // inizializza tutti i vicini a -1
+          neighbor[i] = 0;   // inizializza tutti i vicini a -1
         }
       }
 
@@ -25,7 +25,7 @@ namespace smiles {
       KOKKOS_INLINE_FUNCTION
       node(node_letter letter) : pattern(0), letter(letter) {
         for (int i = 0; i < PRINTABLE_CHAR; i++) {
-          neighbor[i] = -1;
+          neighbor[i] = 0;
         }
       }
 
@@ -33,7 +33,7 @@ namespace smiles {
       KOKKOS_INLINE_FUNCTION
       node(node_letter letter, node_letter pattern) : pattern(pattern), letter(letter) {
         for (int i = 0; i < PRINTABLE_CHAR; i++) {
-          neighbor[i] = -1;
+          neighbor[i] = 0;
         }
       }
     };

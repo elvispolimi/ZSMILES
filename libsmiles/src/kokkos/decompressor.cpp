@@ -48,17 +48,16 @@ void smiles::kokkos::smiles_decompressor::decompress(std::ofstream& out_s) {
   auto d_smiles_out      = smiles_out;
   auto dict = smiles::Dictionary();
 
-
   Kokkos::parallel_for("Decompress", Kokkos::RangePolicy<>(0, smiles_count),
     KOKKOS_LAMBDA(const int id) {
-        const size_t length = d_smiles_len(id);
-        const size_t in_idx = d_smiles_index(id);
-        const size_t out_idx = d_smiles_index_out(id);
+        const size_t length = smiles_len(id);
+        const size_t in_idx = smiles_index(id);
+        const size_t out_idx = smiles_index_out(id);
 
         size_t wp = out_idx; // Write pointer per l'output
 
         for (size_t k = 0; k < length; ++k) {
-            char c = d_smiles_host(in_idx + k); // Legge il carattere corrente
+            char c = smiles_host(in_idx + k); // Legge il carattere corrente
             if (c != smiles::smiles_dictionary_escape_char) {
                 // Espande l'entry del dizionario
                 uint8_t entry = static_cast<uint8_t>(c);
@@ -122,44 +121,99 @@ void smiles_decompressor::clean_up(std::ofstream& out_s) {
   
 }
 
-smiles_compressor::smiles_compressor() {
-  std::cout << "Initializing SMILES compressor..." << std::endl;
-}
-
-smiles_compressor::~smiles_compressor() {
-  std::cout << "Finalizing SMILES compressor..." << std::endl;
-}
-
 void smiles_compressor::compress(std::ofstream& out_s) {
-  // TODO: implement
+  auto gpu_dict = build_gpu_smiles_dictionary();
+  std::cout << "[DEBUG] Starting compression..." << std::endl;
+  auto smiles_len_dev = smiles_len; //lunghezza degli smiles
+  auto smiles_index_dev = smiles_index; //indice di ogni smile
+  auto smiles_out_dev = smiles_out; //buffer continuo di smile in uscita
+  auto smiles_host_dev = smiles_host; // buffer di SMILES in ingresso
+  auto smiles_index_out_dev = smiles_index_out;
+  auto score_matrix = score_matrix_dev;
+  auto pattern_matrix = pattern_matrix_dev;
+  auto length_matrix = length_matrix_dev;
+
+  Kokkos::parallel_for("Compress", Kokkos::RangePolicy<>(0, smiles_count),
+    KOKKOS_LAMBDA(const int id) {
+        auto smile_length = smiles_len_dev(id);
+        assert(MAX_SMILES_LEN > smile_length);
+        auto smile_index = smiles_index_dev(id);
+        score_matrix(id, smile_length) = 0;
+        
+        for (auto index = static_cast<int>(smile_length - 1); index >= 0; index--) { //for loop sullo smile
+          score_matrix(id, index) = score_matrix(id, index + 1) + 2;
+          pattern_matrix(id, index) = 0;
+          length_matrix(id, index) = 1;
+          auto curr = gpu_dict(0);
+          auto curr_id = 0;
+          auto valid_curr = true;
+
+          for(int j = 0; j < LONGEST_PATTERN && valid_curr && j < (smile_length - index); j++){ //for loop per pattern matching
+            const int next_i = curr.neighbor[smiles_host_dev(smile_index + index + j) - NOT_PRINTABLE];
+            if (next_i) {
+              curr = gpu_dict(next_i + curr_id);
+              curr_id = next_i + curr_id;
+              if (curr.pattern != 0) {
+                const auto next = index + j + 1;
+                const auto w = score_matrix(id, next) + 1;
+                if (w < score_matrix(id, index)) {
+                  score_matrix(id, index) = w;
+                  pattern_matrix(id, index) = curr.pattern;
+                  length_matrix(id, index) = j + 1;
+                }
+              }
+            } else {
+              valid_curr = false;
+            }
+          }
+        }
+          int idx = 0;
+          int out_idx = 0;
+          while (idx < smile_length) {
+            if (pattern_matrix(id, idx) != 0) {
+             smiles_out_dev(smile_index + out_idx) = pattern_matrix(id, idx);
+             ++out_idx;
+             idx += length_matrix(id, idx);
+            } else {
+              smiles_out_dev(smile_index + out_idx) = smiles_dictionary_escape_char;
+              ++out_idx;
+              smiles_out_dev(smile_index + out_idx) = smiles_host_dev(smile_index + idx);
+              ++out_idx;
+              idx += 1;
+            }
+          }
+          smiles_out_dev(smile_index + out_idx) = '\0'; // Terminate the SMILES string
+          // fai una kokkos print della stringa
+          //stampa le matrici di score, pattern e length // Solo il thread 0 stampa
+          Kokkos::printf("[DEBUG] Compressed SMILES #%d: ", id + 1);
+          for (int j = 0; j < out_idx; ++j) {
+            Kokkos::printf("%c", smiles_out_dev(smile_index + j));
+          }
+          Kokkos::printf("\n");
+        }
+      );
+      Kokkos::fence();
+
+  // Reset contatori
 }
 
 void smiles_compressor::clean_up(std::ofstream& out_s) {
   // TODO: implement
 }
-
 void smiles_compressor::test() {
-  auto dict_entries = smiles::kokkos::build_gpu_smiles_dictionary_entries();
-
-  // Crea un mirror sul lato host per verificare i dati
-  auto host_dict_entries = Kokkos::create_mirror_view(dict_entries);
-  Kokkos::deep_copy(host_dict_entries, dict_entries);
-
-  // Stampa le entry del dizionario
-  for (size_t i = 0; i < host_dict_entries.extent(0); ++i) {
-    std::cout << "Entry " << i << ": size = " << host_dict_entries(i).size
-              << ", pattern = " << host_dict_entries(i).pattern << std::endl;
-  }
-  size_t total_size = 0;
-  Kokkos::parallel_reduce("SumPatternSizes", host_dict_entries.extent(0),
-                          KOKKOS_LAMBDA(const int i, size_t& local_sum) {
-                            local_sum += dict_entries(i).size;
-                          },
-                          total_size);
-
-  // Stampa il risultato della somma
-  std::cout << "Total size of all patterns: " << total_size << std::endl;
-
+  auto gpu_dict = build_gpu_smiles_dictionary();
+  Kokkos::parallel_for("Test", Kokkos::RangePolicy<>(0, gpu_dict.extent(0)),
+    KOKKOS_LAMBDA(const int id) {
+        auto curr = gpu_dict(id);
+        Kokkos::printf("[DEBUG] Node %d: letter: %c, pattern: %c\n", 
+               id, curr.letter, curr.pattern);
+        for (int i = 0; i < PRINTABLE_CHAR; i++) {
+          if (curr.neighbor[i] != 0 && id == 0) {
+            Kokkos::printf("[DEBUG] Neighbor %d: %d\n", id, static_cast<int>(curr.neighbor[i]));
+          }
+        }
+  });
+  std::cout << "[DEBUG] Test completed." << std::endl;
 }
 
 } // namespace kokkos
