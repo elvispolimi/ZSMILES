@@ -1,6 +1,6 @@
 #include "zsmiles/kokkos/decompressor.hpp"
 #include "zsmiles/kokkos/dictionary.hpp"
-#include <zsmiles/kokkos/kokkos_smiles_dictionary.hpp>
+#include "zsmiles/kokkos/kokkos_smiles_dictionary.hpp"
 #include <Kokkos_Core.hpp>
 #include <iostream>
 #include <cassert>
@@ -16,59 +16,60 @@ void smiles::kokkos::smiles_decompressor::decompress(std::ofstream& out_s) {
 
   // Copia i dati dall'host al dispositivo
   std::cout << "[DEBUG] Copying data from host to device..." << std::endl;
-  auto host_smiles = Kokkos::create_mirror_view(smiles_host);
-  auto host_index = Kokkos::create_mirror_view(smiles_index);
-  auto host_index_out = Kokkos::create_mirror_view(smiles_index_out);
-  auto host_len = Kokkos::create_mirror_view(smiles_len);
-  auto host_smiles_out = Kokkos::create_mirror_view(smiles_out);
 
-  for (size_t i = 0; i < smiles_count; ++i) {
-    host_smiles(i) = smiles_host(i);
-    host_index(i) = smiles_index(i);
-    host_index_out(i) = smiles_index_out(i);
-    host_len(i) = smiles_len(i);
-    host_smiles_out(i) = smiles_out(i);
-  }
-
-  Kokkos::deep_copy(smiles_host, host_smiles);
-  Kokkos::deep_copy(smiles_index, host_index);
-  Kokkos::deep_copy(smiles_index_out, host_index_out);
-  Kokkos::deep_copy(smiles_len, host_len);
-  Kokkos::deep_copy(smiles_out, host_smiles_out);
 
   std::cout << "[DEBUG] Data copied to device." << std::endl;
 
   // Parallel decompression
   std::cout << "[DEBUG] Launching parallel_for for decompression..." << std::endl;
 
-  auto d_smiles_len      = smiles_len;
+  auto d_smiles_len = smiles_len;
   auto d_smiles_index    = smiles_index;
   auto d_smiles_index_out= smiles_index_out;
   auto d_smiles_host     = smiles_host;
   auto d_smiles_out      = smiles_out;
-  auto dict = smiles::Dictionary();
+  auto dict = build_decompression_dictionary();
 
+  //stampa ogni carattere delle compressed smiles in ingresso
+  // Stampa ogni carattere delle compressed SMILES in ingresso
+for (size_t i = 0; i < smiles_count; ++i) {
+    size_t start_idx = smiles_index(i);
+    size_t length = smiles_len(i);
+    std::cout << "SMILES #" << i << " (length = " << length << "):" << std::endl;
+
+    for (size_t j = 0; j < length; ++j) {
+        unsigned char c = static_cast<unsigned char>(smiles_host(start_idx + j));
+        int c_val = static_cast<int>(c);  // Stampa numerica sicura 0..255
+
+        std::cout << "  idx " << j 
+                  << " | char: '" << (std::isprint(c) ? static_cast<char>(c) : '.') 
+                  << "' | dec: " << c_val 
+                  << std::endl;
+    }
+}
+
+  
   Kokkos::parallel_for("Decompress", Kokkos::RangePolicy<>(0, smiles_count),
     KOKKOS_LAMBDA(const int id) {
-        const size_t length = smiles_len(id);
-        const size_t in_idx = smiles_index(id);
-        const size_t out_idx = smiles_index_out(id);
-
+        const size_t length = d_smiles_len(id);
+        const size_t in_idx = d_smiles_index(id);
+        const size_t out_idx = d_smiles_index_out(id);
+        //stampa tutti i valori
+        Kokkos::printf("[DEBUG] Decompressing SMILES ID: %d, length: %d, in_idx: %d, out_idx: %d\n", id, length, in_idx, out_idx);
         size_t wp = out_idx; // Write pointer per l'output
 
         for (size_t k = 0; k < length; ++k) {
-            char c = smiles_host(in_idx + k); // Legge il carattere corrente
-            if (c != smiles::smiles_dictionary_escape_char) {
+            Kokkos::printf("id: %d k: %d", id, k);
+            char c = d_smiles_host(in_idx + k); // Legge il carattere corrente
+            if (c != ' ') {
                 // Espande l'entry del dizionario
                 uint8_t entry = static_cast<uint8_t>(c);
-                size_t off = dict.offset(entry);
-                size_t sz  = dict.size(entry);
-                for (size_t t = 0; t < sz; ++t) {
-                    d_smiles_out(wp++) = dict.pattern_at(off + t);
+                for (size_t t = 0; t < dict(entry).length; ++t) {
+                    d_smiles_out(wp++) = dict(entry).pattern[t];
                 }
             } else {
                 // Carattere di escape: copia il carattere letterale successivo
-                char literal = d_smiles_host(in_idx + (++k));
+                unsigned char literal = d_smiles_host(in_idx + (++k));
                 d_smiles_out(wp++) = literal;
             }
         }
@@ -183,18 +184,9 @@ void smiles_compressor::compress(std::ofstream& out_s) {
             }
           }
           smiles_out_dev(smile_index + out_idx) = '\0'; // Terminate the SMILES string
-          // fai una kokkos print della stringa
-          //stampa le matrici di score, pattern e length // Solo il thread 0 stampa
-          Kokkos::printf("[DEBUG] Compressed SMILES #%d: ", id + 1);
-          for (int j = 0; j < out_idx; ++j) {
-            Kokkos::printf("%c", smiles_out_dev(smile_index + j));
-          }
-          Kokkos::printf("\n");
         }
       );
       Kokkos::fence();
-
-  // Reset contatori
 }
 
 void smiles_compressor::clean_up(std::ofstream& out_s) {

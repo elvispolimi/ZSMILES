@@ -4,7 +4,6 @@
 #include <ostream>
 #include <fstream>
 #include <iostream>
-#include <zsmiles/kokkos/kokkos_smiles_dictionary.hpp>
 #include <Kokkos_Core.hpp>
 #include <zsmiles/gpu/knobs.hpp>
 #include <zsmiles/compression_dictionary.hpp>

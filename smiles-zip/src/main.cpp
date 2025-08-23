@@ -279,58 +279,62 @@ Kokkos::finalize();
      * il buffer prealloca la dimensione dello smile * LONGEST_PATTERN + 1.
      */
     LIKWID_MARKER_INIT;
-    Kokkos::initialize();{
+    Kokkos::initialize();
+{
     smiles::kokkos::smiles_decompressor decompress_cont(CHAR_PER_DEVICE, SMILES_PER_DEVICE);
     std::string line;
 
-while (std::getline(i_file, line)) {
-  std::cout << "[DEBUG] Read line: " << line << std::endl;
+    while (std::getline(i_file, line)) {
+        const size_t comp_len = line.size();
 
-  size_t prev_end = decompress_cont.smiles_count == 0 ? 0 :
-      decompress_cont.smiles_index_out(decompress_cont.smiles_count - 1) +
-      decompress_cont.smiles_len(decompress_cont.smiles_count - 1) * LONGEST_PATTERN + 1;
+        // Calcola prev_end in base agli elementi REALMENTE inseriti (smiles_count)
+        size_t prev_end = (decompress_cont.smiles_count == 0)
+            ? 0
+            : decompress_cont.smiles_index_out(decompress_cont.smiles_count - 1)
+              + decompress_cont.smiles_len(decompress_cont.smiles_count - 1) * LONGEST_PATTERN
+              + 1; // per il '\n'
 
-  std::cout << "[DEBUG] Previous end: " << prev_end << std::endl;
+        // Verifica overflow: output decompresso (stima max) e buffer input compresso
+        const bool need_flush =
+            (decompress_cont.smiles_count > 0 &&
+             (prev_end + comp_len * LONGEST_PATTERN + 1) > CHAR_PER_DEVICE) ||
+            (decompress_cont.smiles_count == SMILES_PER_DEVICE) ||
+            (decompress_cont.smiles_host_index + comp_len > CHAR_PER_DEVICE);
 
-  if ((decompress_cont.smiles_count > 0 &&
-       (prev_end + line.size() * LONGEST_PATTERN + 1) >= CHAR_PER_DEVICE) ||
-      decompress_cont.smiles_count >= SMILES_PER_DEVICE) {
-    std::cout << "[DEBUG] Buffer full, decompressing current batch..." << std::endl;
-    decompress_cont.decompress(o_file);
-    decompress_cont.smiles_count = 0;
-    decompress_cont.smiles_host_index = 0;
-  }
+        if (need_flush) {
+            decompress_cont.decompress(o_file);
+            // reset contatori per nuovo batch
+            decompress_cont.smiles_count = 0;
+            decompress_cont.smiles_host_index = 0;
+            prev_end = 0; // dopo flush, l'output riparte da 0
+        }
 
-  std::cout << "[DEBUG] Adding SMILES to buffer..." << std::endl;
+        // Scrivi metadati per l'elemento corrente all’indice smiles_count
+        const size_t id = decompress_cont.smiles_count;
 
-  if (decompress_cont.smiles_count < SMILES_PER_DEVICE &&
-      decompress_cont.smiles_host_index + line.size() <= CHAR_PER_DEVICE) {
-    decompress_cont.smiles_index(decompress_cont.smiles_count) = decompress_cont.smiles_host_index;
-    decompress_cont.smiles_len(decompress_cont.smiles_count) = line.size();
+        // start nel buffer compresso
+        decompress_cont.smiles_index(id) = decompress_cont.smiles_host_index;
 
-    prev_end = decompress_cont.smiles_count == 0 ? 0 :
-        decompress_cont.smiles_index_out(decompress_cont.smiles_count - 1) +
-        decompress_cont.smiles_len(decompress_cont.smiles_count - 1) * LONGEST_PATTERN + 1;
+        // lunghezza COMPRESSA
+        decompress_cont.smiles_len(id)   = comp_len;
 
-    decompress_cont.smiles_index_out(decompress_cont.smiles_count) = prev_end;
+        // start nel buffer decompresso stimato (per output)
+        decompress_cont.smiles_index_out(id) = prev_end;
 
-    for (size_t i = 0; i < line.size(); ++i) {
-      decompress_cont.smiles_host(decompress_cont.smiles_host_index++) = line[i];
+        // Copia il contenuto compresso nel buffer
+        for (size_t i = 0; i < comp_len; ++i) {
+            decompress_cont.smiles_host(decompress_cont.smiles_host_index++) = line[i];
+        }
+
+        // Incrementa il numero di elementi caricati
+        decompress_cont.smiles_count++;
     }
 
-    ++decompress_cont.smiles_count;
-    std::cout << "[DEBUG] Added SMILES #" << decompress_cont.smiles_count
-              << ", length: " << line.size() << std::endl;
-  } else {
-    std::cerr << "[ERROR] Buffer overflow or too many SMILES, skipping line." << std::endl;
-  }
-}
-
-// decompressione finale
-if (decompress_cont.smiles_count > 0) {
-    std::cout << "[DEBUG] Final decompression of remaining SMILES..." << std::endl;
-    decompress_cont.decompress(o_file);
-}
+    // flush finale
+    if (decompress_cont.smiles_count > 0) {
+        std::cout << "[DEBUG] Final decompression of remaining SMILES..." << std::endl;
+        decompress_cont.decompress(o_file);
+    }
 }
 Kokkos::finalize();
     LIKWID_MARKER_CLOSE;
