@@ -49,3 +49,20 @@ if(ENABLE_HIP)
     --hip
   )
 endif()
+
+if(ENABLE_KOKKOS)
+  add_test(NAME kokkos-test-compress
+    COMMAND ${Python_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests.py
+    --test_data ${TEST_DATA}
+    --executable ${SMILES_EXECUTABLE}
+    --compress
+    --kokkos
+  )
+  add_test(NAME kokkos-test-decompress
+    COMMAND ${Python_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests.py
+    --test_data ${TEST_DATA}
+    --executable ${SMILES_EXECUTABLE}
+    --decompress
+    --kokkos
+  )
+endif()

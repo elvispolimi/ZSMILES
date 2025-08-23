@@ -23,6 +23,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--hip", default=False, action="store_true", help="Enable HIP implementation"
     )
+    parser.add_argument(
+        "--kokkos", default=False, action="store_true", help="Enable Kokkos implementation"
+    )
     args = parser.parse_args()
 
     opts = []
@@ -51,6 +54,8 @@ if __name__ == "__main__":
         opts += ["--cuda"]
     if args.hip:
         opts += ["--hip"]
+    if args.kokkos:
+        opts += ["--kokkos"]
 
     # execute the test and make sure that it has executed properly
     rc = subprocess.run(
