@@ -82,24 +82,25 @@ void smiles_decompressor::clean_up(std::ofstream& out_s) {
 
 void smiles_compressor::compress(std::ofstream& out_s) {
   auto gpu_dict = build_gpu_smiles_dictionary();
-  auto smiles_len_dev = smiles_len; //lunghezza degli smiles
-  auto smiles_index_dev = smiles_index; //indice di ogni smile
-  auto smiles_out_dev = smiles_out; //buffer continuo di smile in uscita
-  auto smiles_host_dev = smiles_host; // buffer di SMILES in ingresso
-  auto smiles_out_len_dev = smiles_out_len;
-  auto smiles_index_out_dev = smiles_index_out;
+  auto smiles_len_dev = smiles_len;
+  auto smiles_index_dev = smiles_index;
+  auto smiles_host_dev = smiles_host;
   auto score_matrix = score_matrix_dev;
   auto pattern_matrix = pattern_matrix_dev;
   auto length_matrix = length_matrix_dev;
+  auto smiles_out_dev = smiles_out;
 
-  Kokkos::parallel_for("Compress", Kokkos::RangePolicy<>(0, smiles_count),
+  // 1. Calcola le lunghezze di output per ogni stringa
+  Kokkos::View<int*, Kokkos::DefaultExecutionSpace::memory_space> dev_smiles_out_len("dev_smiles_out_len", smiles_count);
+
+  Kokkos::parallel_for("CompressLength", Kokkos::RangePolicy<>(0, smiles_count),
     KOKKOS_LAMBDA(const int id) {
         auto smile_length = smiles_len_dev(id);
         assert(MAX_SMILES_LEN > smile_length);
         auto smile_index = smiles_index_dev(id);
         score_matrix(id, smile_length) = 0;
         
-        for (auto index = static_cast<int>(smile_length - 1); index >= 0; index--) { //for loop sullo smile
+        for (auto index = static_cast<int>(smile_length - 1); index >= 0; index--) {
           score_matrix(id, index) = score_matrix(id, index + 1) + 2;
           pattern_matrix(id, index) = 0;
           length_matrix(id, index) = 1;
@@ -107,7 +108,7 @@ void smiles_compressor::compress(std::ofstream& out_s) {
           auto curr_id = 0;
           auto valid_curr = true;
 
-          for(int j = 0; j < LONGEST_PATTERN && valid_curr && j < (smile_length - index); j++){ //for loop per pattern matching
+          for(int j = 0; j < LONGEST_PATTERN && valid_curr && j < (smile_length - index); j++){
             const int next_i = curr.neighbor[smiles_host_dev(smile_index + index + j) - NOT_PRINTABLE];
             if (next_i) {
               curr = gpu_dict(next_i + curr_id);
@@ -130,49 +131,77 @@ void smiles_compressor::compress(std::ofstream& out_s) {
           int out_idx = 0;
           while (idx < smile_length) {
             if (pattern_matrix(id, idx) != 0) {
-             smiles_out_dev(smile_index + out_idx) = pattern_matrix(id, idx);
-             ++out_idx;
-             idx += length_matrix(id, idx);
-            } else {
-              smiles_out_dev(smile_index + out_idx) = smiles_dictionary_escape_char;
-              ++out_idx;
-              smiles_out_dev(smile_index + out_idx) = smiles_host_dev(smile_index + idx);
-              ++out_idx;
+             out_idx++;
+              idx += length_matrix(id, idx);
+          } else {
+              out_idx += 2;
               idx += 1;
-            }
           }
-          smiles_out_dev(smile_index + out_idx) = '\n'; // Terminate the SMILES string
-          smiles_out_len_dev(id) = out_idx + 1; // Include the null terminator
-          // fai una kokkos print della stringa
-            //stampa le matrici di score, pattern e length // Solo il thread 0 stampa
-                      //stampa le matrici di score, pattern e length // Solo il thread 0 stampa
+          }
+          dev_smiles_out_len(id) = out_idx + 1;
         }
       );
+      
       Kokkos::fence();
 
-      auto host_smiles_out = Kokkos::create_mirror_view(smiles_out);
-      Kokkos::deep_copy(host_smiles_out, smiles_out);
+      // 2. Calcola gli indici cumulativi per il buffer di output
+  Kokkos::View<int*, Kokkos::DefaultExecutionSpace::memory_space> dev_smiles_index_out("dev_smiles_index_out", smiles_count + 1);
 
-      auto host_smiles_out_len = Kokkos::create_mirror_view(smiles_out_len);
-      Kokkos::deep_copy(host_smiles_out_len, smiles_out_len);
+  Kokkos::parallel_scan("CalculateOutputIndices", Kokkos::RangePolicy<>(0, smiles_count),
+    KOKKOS_LAMBDA(const int i, int& update, const bool final_pass) {
+      update += dev_smiles_out_len(i);
+      if (final_pass) {
+          dev_smiles_index_out(i + 1) = update;
+      }
+    });
 
-      auto host_smiles_index = Kokkos::create_mirror_view(smiles_index);
-      Kokkos::deep_copy(host_smiles_index, smiles_index);
+  Kokkos::fence();
 
-      auto host_smiles_len = Kokkos::create_mirror_view(smiles_len);
-      Kokkos::deep_copy(host_smiles_len, smiles_len);
+  // 3. Esegui la compressione finale scrivendo sul buffer di output
+  Kokkos::parallel_for("CompressWrite", Kokkos::RangePolicy<>(0, smiles_count),
+    KOKKOS_LAMBDA(const int id) {
+      auto smile_length = smiles_len_dev(id);
+      auto smile_index = smiles_index_dev(id);
+      auto out_start_idx = dev_smiles_index_out(id);
+      int idx = 0;
+      int out_idx = 0;
+      
+      while (idx < smile_length) {
+          if (pattern_matrix(id, idx) != 0) {
+              smiles_out_dev(out_start_idx + out_idx) = pattern_matrix(id, idx);
+              ++out_idx;
+              idx += length_matrix(id, idx);
+          } else {
+              smiles_out_dev(out_start_idx + out_idx) = smiles_dictionary_escape_char;
+              ++out_idx;
+              smiles_out_dev(out_start_idx + out_idx) = smiles_host_dev(smile_index + idx);
+              ++out_idx;
+              idx += 1;
+          }
+      }
+      smiles_out_dev(out_start_idx + out_idx) = '\n';
+  });
 
-      // Costruisci il buffer di output
-      std::string temp_out;
-      temp_out.reserve(host_smiles_index(smiles_count)); // stima: ultimo indice ≈ lunghezza totale
+  Kokkos::fence();
 
-      for(int i = 0; i < smiles_count; i++) {
-      const char* ptr = &host_smiles_out(host_smiles_index(i)); // puntatore all'inizio dello SMILES
-      temp_out.append(ptr, host_smiles_out_len(i));             // lunghezza corretta
-    }
+      // 4. Copia i dati e scrivi su file
+  auto host_smiles_out = Kokkos::create_mirror_view(smiles_out);
+  Kokkos::deep_copy(host_smiles_out, smiles_out);
 
-    // Scrivi su file
-    out_s << temp_out;
+  auto host_smiles_index_out = Kokkos::create_mirror_view(dev_smiles_index_out);
+  Kokkos::deep_copy(host_smiles_index_out, dev_smiles_index_out);
+
+  std::string temp_out;
+  auto total_size = host_smiles_index_out(smiles_count);
+  temp_out.reserve(total_size);
+
+  for (int i = 0; i < smiles_count; i++) {
+    const char* ptr = &host_smiles_out(host_smiles_index_out(i));
+    auto length = host_smiles_index_out(i + 1) - host_smiles_index_out(i);
+    temp_out.append(ptr, length);
+  }
+
+  out_s << temp_out;
 }
 
 void smiles_compressor::clean_up(std::ofstream& out_s) {
