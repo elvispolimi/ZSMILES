@@ -26,6 +26,7 @@ public:
   size_t smiles_count = 0;      // quante SMILES abbiamo aggiunto
   size_t smiles_host_index  = 0;      // prossimo indice disponibile in smiles_host
 
+
   smiles_decompressor(size_t max_chars, size_t max_smiles)
     : smiles_index_out("smiles_index_out", max_smiles),
       smiles_len("smiles_len", max_smiles),
@@ -53,6 +54,7 @@ public:
   Kokkos::View<index_type*, Kokkos::CudaUVMSpace> smiles_index;
   Kokkos::View<smiles_type*, Kokkos::CudaUVMSpace> smiles_host;
   Kokkos::View<smiles_type*, Kokkos::CudaUVMSpace> smiles_out;
+  Kokkos::View<index_type*, Kokkos::CudaUVMSpace> smiles_out_len;
 
 
 
@@ -65,6 +67,7 @@ public:
                           smiles_index("smiles_index", SMILES_PER_DEVICE),
                           smiles_host("smiles_host", CHAR_PER_DEVICE),
                           smiles_out("smiles_out", CHAR_PER_DEVICE),
+                          smiles_out_len("smiles_out_len", SMILES_PER_DEVICE),
                           pattern_matrix_dev("pattern_matrix_dev", SMILES_PER_DEVICE, 300),
                           length_matrix_dev("length_matrix_dev", SMILES_PER_DEVICE, 300),
                           score_matrix_dev("score_matrix_dev", SMILES_PER_DEVICE, 300) {
