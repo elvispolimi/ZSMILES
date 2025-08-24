@@ -73,8 +73,8 @@ int main(int argc, char* argv[]) {
       std::string line;
       while (std::getline(i_file, line)) {
         size_t prev_end = compress_cont.smiles_count == 0 ? 0 :
-            compress_cont.smiles_index_out(compress_cont.smiles_count - 1) +
-            compress_cont.smiles_len(compress_cont.smiles_count - 1) * 2 + 1;
+            compress_cont.h_smiles_index_out(compress_cont.smiles_count - 1) +
+            compress_cont.h_smiles_len(compress_cont.smiles_count - 1) * 2 + 1;
         if ((compress_cont.smiles_count > 0 &&
             (prev_end + line.size() * 2 + 1) >= CHAR_PER_DEVICE) ||
             compress_cont.smiles_count >= SMILES_PER_DEVICE) {
@@ -89,12 +89,12 @@ int main(int argc, char* argv[]) {
         }
 
         // Scrittura indici e lunghezze
-        compress_cont.smiles_index(compress_cont.smiles_count) = compress_cont.smiles_host_index;
-        compress_cont.smiles_len(compress_cont.smiles_count)   = line.size();
-        compress_cont.smiles_index_out(compress_cont.smiles_count) = prev_end;
+        compress_cont.h_smiles_index(compress_cont.smiles_count) = compress_cont.smiles_host_index;
+        compress_cont.h_smiles_len(compress_cont.smiles_count)   = line.size();
+        compress_cont.h_smiles_index_out(compress_cont.smiles_count) = prev_end;
         // Copia caratteri nel buffer
         for (size_t i = 0; i < line.size(); ++i) {
-          compress_cont.smiles_host(compress_cont.smiles_host_index++) = line[i];
+          compress_cont.h_smiles_host(compress_cont.smiles_host_index++) = line[i];
         }
 
         ++compress_cont.smiles_count;
@@ -291,8 +291,8 @@ Kokkos::finalize();
         // Calcola prev_end in base agli elementi REALMENTE inseriti (smiles_count)
         size_t prev_end = (decompress_cont.smiles_count == 0)
             ? 0
-            : decompress_cont.smiles_index_out(decompress_cont.smiles_count - 1)
-              + decompress_cont.smiles_len(decompress_cont.smiles_count - 1) * LONGEST_PATTERN
+            : decompress_cont.h_smiles_index_out(decompress_cont.smiles_count - 1)
+              + decompress_cont.h_smiles_len(decompress_cont.smiles_count - 1) * LONGEST_PATTERN
               + 1; // per il '\n'
 
         // Verifica overflow: output decompresso (stima max) e buffer input compresso
@@ -314,17 +314,17 @@ Kokkos::finalize();
         const size_t id = decompress_cont.smiles_count;
 
         // start nel buffer compresso
-        decompress_cont.smiles_index(id) = decompress_cont.smiles_host_index;
+        decompress_cont.h_smiles_index(id) = decompress_cont.smiles_host_index;
 
         // lunghezza COMPRESSA
-        decompress_cont.smiles_len(id)   = comp_len;
+        decompress_cont.h_smiles_len(id)   = comp_len;
 
         // start nel buffer decompresso stimato (per output)
-        decompress_cont.smiles_index_out(id) = prev_end;
+        decompress_cont.h_smiles_index_out(id) = prev_end;
 
         // Copia il contenuto compresso nel buffer
         for (size_t i = 0; i < comp_len; ++i) {
-            decompress_cont.smiles_host(decompress_cont.smiles_host_index++) = line[i];
+            decompress_cont.h_smiles_host(decompress_cont.smiles_host_index++) = line[i];
         }
 
         // Incrementa il numero di elementi caricati
