@@ -77,7 +77,7 @@ int main(int argc, char* argv[]) {
             compress_cont.smiles_len(compress_cont.smiles_count - 1) * 2 + 1;
         if ((compress_cont.smiles_count > 0 &&
             (prev_end + line.size() * 2 + 1) >= CHAR_PER_DEVICE) ||
-            compress_cont.smiles_count >= 2000) {
+            compress_cont.smiles_count >= SMILES_PER_DEVICE) {
           compress_cont.compress(o_file);
           compress_cont.smiles_count = 0;
           compress_cont.smiles_host_index = 0;

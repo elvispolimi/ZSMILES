@@ -62,18 +62,19 @@ public:
   size_t smiles_count = 0;      // quante SMILES abbiamo aggiunto
   size_t smiles_host_index  = 0;      // prossimo indice disponibile in smiles_host
 
-  smiles_compressor() :   smiles_index_out("smiles_index_out", SMILES_PER_DEVICE),
-                          smiles_len("smiles_len", SMILES_PER_DEVICE),
-                          smiles_index("smiles_index", SMILES_PER_DEVICE),
-                          smiles_host("smiles_host", CHAR_PER_DEVICE),
-                          smiles_out("smiles_out", CHAR_PER_DEVICE),
-                          smiles_out_len("smiles_out_len", SMILES_PER_DEVICE),
-                          pattern_matrix_dev("pattern_matrix_dev", SMILES_PER_DEVICE, 300),
-                          length_matrix_dev("length_matrix_dev", SMILES_PER_DEVICE, 300),
-                          score_matrix_dev("score_matrix_dev", SMILES_PER_DEVICE, 300) {
-    std::cout << "[DEBUG] SMILES compressor initialized with max_chars: " 
-              << CHAR_PER_DEVICE << " and max_smiles: " << SMILES_PER_DEVICE << std::endl;
-  }
+  smiles_compressor()
+    : smiles_index_out(Kokkos::view_alloc(Kokkos::WithoutInitializing, "smiles_index_out"), SMILES_PER_DEVICE),
+      smiles_len(Kokkos::view_alloc(Kokkos::WithoutInitializing, "smiles_len"), SMILES_PER_DEVICE),
+      smiles_index(Kokkos::view_alloc(Kokkos::WithoutInitializing, "smiles_index"), SMILES_PER_DEVICE),
+      smiles_host(Kokkos::view_alloc(Kokkos::WithoutInitializing, "smiles_host"), CHAR_PER_DEVICE),
+      smiles_out(Kokkos::view_alloc(Kokkos::WithoutInitializing, "smiles_out"), CHAR_PER_DEVICE),
+      smiles_out_len(Kokkos::view_alloc(Kokkos::WithoutInitializing, "smiles_out_len"), SMILES_PER_DEVICE),
+      pattern_matrix_dev(Kokkos::view_alloc(Kokkos::WithoutInitializing, "pattern_matrix_dev"), SMILES_PER_DEVICE, 100),
+      length_matrix_dev(Kokkos::view_alloc(Kokkos::WithoutInitializing, "length_matrix_dev"), SMILES_PER_DEVICE, 100),
+      score_matrix_dev(Kokkos::view_alloc(Kokkos::WithoutInitializing, "score_matrix_dev"), SMILES_PER_DEVICE, 100) {
+  std::cout << "[DEBUG] SMILES compressor initialized with max_chars: " 
+            << CHAR_PER_DEVICE << " and max_smiles: " << SMILES_PER_DEVICE << std::endl;
+}
 
   void compress(std::ofstream& out_s);
   void clean_up(std::ofstream& out_s);
